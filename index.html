@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cerebral Aneurysm Hemodynamic Analysis Dashboard</title>
+    <!-- Google Fonts: Ubuntu Font Family -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for clinical icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Drag & Drop Upload Zone Wrapper -->
+    <div id="drop-zone-container" class="drop-zone-wrapper">
+        <!-- Main Dashboard Layout -->
+        <header class="main-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-brain clinical-logo-icon"></i>
+                <h1>NeuroFlow CFD Analyst</h1>
+            </div>
+            <div class="patient-banner">
+                <div class="banner-item">
+                    <span class="banner-label">Active Case:</span>
+                    <span id="active-patient-id" class="banner-value">-</span>
+                </div>
+                <div class="banner-item">
+                    <span class="banner-label">Clinical Status:</span>
+                    <span id="active-patient-status" class="status-badge">-</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="expand-case-btn" class="btn btn-primary btn-icon">
+                    <i class="fa-solid fa-file-invoice"></i> Expand Case Review
+                </button>
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Sidebar: Case Switcher -->
+            <aside class="sidebar-panel">
+                <div class="sidebar-title">
+                    <h2>Patient Profiles</h2>
+                </div>
+                <div class="patient-list" id="patient-list-container">
+                    <!-- Cards will be populated by JavaScript -->
+                </div>
+
+                <!-- Auxiliary Drag-and-Drop Area -->
+                <div class="upload-box-sidebar" id="sidebar-upload-box">
+                    <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                    <h3>Upload DICOM / MRA</h3>
+                    <p>Drag & drop or click to simulate clinical pipeline</p>
+                    <input type="file" id="file-uploader" style="display: none;" multiple>
+                </div>
+            </aside>
+
+            <!-- Main Panel: Heatmap Workspace -->
+            <main class="workspace-panel">
+                <div class="panel-header-row">
+                    <div class="section-title-wrap">
+                        <h2 class="accent-title">2D Hemodynamic Heatmap</h2>
+                    </div>
+                    <div class="toggle-control-group">
+                        <button id="toggle-tawss-btn" class="toggle-btn active" data-map="TAWSS">
+                            TAWSS Distribution
+                        </button>
+                        <button id="toggle-osi-btn" class="toggle-btn" data-map="OSI">
+                            OSI Instability
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="canvas-container">
+                    <!-- HTML5 Heatmap Canvas -->
+                    <canvas id="heatmap-canvas" width="650" height="420"></canvas>
+                    
+                    <!-- Dynamic Tooltip -->
+                    <div id="canvas-tooltip" class="canvas-tooltip hidden">
+                        <div class="tooltip-header">
+                            <span class="tooltip-title">Node #<span id="tooltip-node-id">-</span></span>
+                            <span id="tooltip-risk-tag" class="tooltip-risk-badge">Stable</span>
+                        </div>
+                        <div class="tooltip-body">
+                            <div class="tooltip-row">
+                                <span class="tooltip-label">TAWSS:</span>
+                                <span class="tooltip-val" id="tooltip-tawss-val">-</span>
+                            </div>
+                            <div class="tooltip-row">
+                                <span class="tooltip-label">OSI:</span>
+                                <span class="tooltip-val" id="tooltip-osi-val">-</span>
+                            </div>
+                        </div>
+                        <div id="tooltip-alarm-msg" class="tooltip-alarm hidden">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            [Rupture Vulnerability Zone Detected]
+                        </div>
+                    </div>
+
+                    <!-- Canvas Interactive Hints -->
+                    <div class="canvas-overlay-hints">
+                        <span><i class="fa-solid fa-circle-info"></i> Hover over vascular sectors for dynamic spatial telemetry</span>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Panel: Gauges & Metrics -->
+            <section class="metrics-panel">
+                <div class="sidebar-title">
+                    <h2>Hemodynamic Telemetry</h2>
+                </div>
+                
+                <!-- Central Composite Risk Index Gauge -->
+                <div class="card metric-card composite-card">
+                    <h3 class="card-title">Composite Risk Index</h3>
+                    <div class="composite-gauge-container">
+                        <svg class="radial-ring-svg" viewBox="0 0 120 60">
+                            <!-- Background track -->
+                            <circle class="ring-bg" cx="60" cy="60" r="50" stroke-dasharray="157.08 157.08" transform="rotate(-180 60 60)"></circle>
+                            <!-- Color track filled via JS -->
+                            <circle id="composite-ring-fill" class="ring-fill" cx="60" cy="60" r="50" stroke-dasharray="157.08 157.08" transform="rotate(-180 60 60)"></circle>
+                        </svg>
+                        <div class="composite-needle-pivot"></div>
+                        <div id="composite-needle" class="composite-needle"></div>
+                        <div class="composite-gauge-text">
+                            <span id="composite-risk-score" class="score-value">0</span>
+                            <span class="score-max">/100</span>
+                        </div>
+                    </div>
+                    <div class="composite-risk-label-wrap">
+                        <span id="composite-risk-label" class="risk-label-text">Calculating...</span>
+                    </div>
+                </div>
+
+                <!-- TAWSS & OSI Radial Charts -->
+                <div class="metrics-row-two-col">
+                    <!-- TAWSS Gauge Card -->
+                    <div class="card metric-card hover-card">
+                        <h3 class="card-title">Aneurysm TAWSS</h3>
+                        <div class="radial-progress-container">
+                            <svg class="radial-progress-svg" viewBox="0 0 80 80">
+                                <circle class="ring-bg" cx="40" cy="40" r="32"></circle>
+                                <circle id="tawss-progress-fill" class="ring-fill" cx="40" cy="40" r="32" transform="rotate(-90 40 40)"></circle>
+                            </svg>
+                            <div class="radial-progress-text">
+                                <span id="tawss-gauge-val" class="gauge-val">0.00</span>
+                                <span class="gauge-unit">Pa</span>
+                            </div>
+                        </div>
+                        <div class="alert-indicator hidden" id="tawss-alert">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Low TAWSS (< 0.4 Pa)
+                        </div>
+                    </div>
+
+                    <!-- OSI Gauge Card -->
+                    <div class="card metric-card hover-card">
+                        <h3 class="card-title">Aneurysm OSI</h3>
+                        <div class="radial-progress-container">
+                            <svg class="radial-progress-svg" viewBox="0 0 80 80">
+                                <circle class="ring-bg" cx="40" cy="40" r="32"></circle>
+                                <circle id="osi-progress-fill" class="ring-fill" cx="40" cy="40" r="32" transform="rotate(-90 40 40)"></circle>
+                            </svg>
+                            <div class="radial-progress-text">
+                                <span id="osi-gauge-val" class="gauge-val">0.00</span>
+                                <span class="gauge-unit">Index</span>
+                            </div>
+                        </div>
+                        <div class="alert-indicator hidden" id="osi-alert">
+                            <i class="fa-solid fa-triangle-exclamation"></i> High OSI (> 0.3)
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Morphology Data Grid -->
+                <div class="card metric-card morphology-card">
+                    <h3 class="card-title">Aneurysm Morphology</h3>
+                    <div class="morphology-grid">
+                        <div class="morphology-item">
+                            <span class="morph-label">Max Diameter</span>
+                            <div class="morph-value-container">
+                                <span id="morph-max-diameter" class="morph-val">-</span>
+                                <span class="morph-unit">mm</span>
+                            </div>
+                        </div>
+                        <div class="morphology-item">
+                            <span class="morph-label">Aspect Ratio</span>
+                            <div class="morph-value-container">
+                                <span id="morph-aspect-ratio" class="morph-val">-</span>
+                                <span class="morph-unit">Ratio</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- FULL REPORT MODAL VIEW -->
+        <div id="report-modal" class="modal-overlay hidden">
+            <div class="modal-content report-modal-content">
+                <header class="modal-header">
+                    <div class="modal-title-area">
+                        <i class="fa-solid fa-file-medical clinical-logo-icon"></i>
+                        <h2>CLINICAL CFD INSIGHTS REPORT</h2>
+                    </div>
+                    <button class="close-modal-btn" id="close-report-btn">&times;</button>
+                </header>
+                <div class="modal-body printable-report-body" id="printable-report-area">
+                    <div class="report-watermark">CONFIDENTIAL MEDICAL DATA</div>
+                    
+                    <!-- Report Header / Metadata Grid -->
+                    <div class="report-section report-meta-grid">
+                        <div class="report-meta-item">
+                            <span class="meta-label">Patient ID</span>
+                            <span class="meta-value" id="report-patient-id">PT-2025-0041</span>
+                        </div>
+                        <div class="report-meta-item">
+                            <span class="meta-label">Date Generated</span>
+                            <span class="meta-value" id="report-date-generated">2026-07-05</span>
+                        </div>
+                        <div class="report-meta-item">
+                            <span class="meta-label">Anatomical Target</span>
+                            <span class="meta-value">Internal Carotid Aneurysm</span>
+                        </div>
+                        <div class="report-meta-item">
+                            <span class="meta-label">Clinical Risk Classification</span>
+                            <span class="meta-value"><span id="report-risk-badge" class="status-badge">HIGH RISK</span></span>
+                        </div>
+                    </div>
+
+                    <!-- Split Columns: Diagram vs Table -->
+                    <div class="report-layout-columns">
+                        <!-- Column 1: Aneurysm Case Details & Diagram -->
+                        <div class="report-column flex-column">
+                            <h3 class="report-subsection-title">Computational Mesh & Vascular Layout</h3>
+                            <div class="report-canvas-placeholder-container">
+                                <canvas id="report-static-canvas" width="300" height="230"></canvas>
+                                <div class="report-canvas-legend">
+                                    <div class="legend-title">TAWSS Scale (Pa)</div>
+                                    <div class="legend-gradient"></div>
+                                    <div class="legend-labels">
+                                        <span>0.0 (High Risk)</span>
+                                        <span>1.0</span>
+                                        <span>2.0+ (Stable)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Column 2: Hemodynamic & Morphological Metrics -->
+                        <div class="report-column flex-column">
+                            <h3 class="report-subsection-title">Clinical Metric Matrix</h3>
+                            <table class="report-metrics-table">
+                                <thead>
+                                    <tr>
+                                        <th>Metric Description</th>
+                                        <th>CFD Extracted Value</th>
+                                        <th>Clinical Threshold</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="bold">Time-Averaged Wall Shear Stress (TAWSS)</td>
+                                        <td id="report-tawss-val">-</td>
+                                        <td>&gt; 0.40 Pa</td>
+                                        <td id="report-tawss-status">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="bold">Oscillatory Shear Index (OSI)</td>
+                                        <td id="report-osi-val">-</td>
+                                        <td>&lt; 0.30</td>
+                                        <td id="report-osi-status">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="bold">Max Aneurysm Diameter</td>
+                                        <td id="report-diameter-val">-</td>
+                                        <td>&lt; 5.00 mm</td>
+                                        <td id="report-diameter-status">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="bold">Aneurysm Aspect Ratio</td>
+                                        <td id="report-aspect-val">-</td>
+                                        <td>&lt; 1.50</td>
+                                        <td id="report-aspect-status">-</td>
+                                    </tr>
+                                    <tr class="highlight-row">
+                                        <td class="bold">Composite Risk Score</td>
+                                        <td id="report-composite-score" class="bold">-</td>
+                                        <td>&lt; 75.00</td>
+                                        <td id="report-composite-status" class="bold">-</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Clinical Interpretation -->
+                    <div class="report-section interpretation-section">
+                        <h3 class="report-subsection-title">Clinical Assessment & Recommendations</h3>
+                        <p class="clinical-text" id="report-clinical-text">
+                            -
+                        </p>
+                    </div>
+
+                    <!-- Report Sign-off -->
+                    <div class="report-section report-footer-signatures">
+                        <div class="signature-box">
+                            <div class="signature-line">NeuroFlow CFD Automated Solver</div>
+                            <span class="signature-title">Extraction System Signature</span>
+                        </div>
+                        <div class="signature-box">
+                            <div class="signature-line">Dr. ___________________________</div>
+                            <span class="signature-title">Attending Clinician Sign-off</span>
+                        </div>
+                    </div>
+                </div>
+                <footer class="modal-footer print-actions">
+                    <button class="btn btn-secondary" id="cancel-report-btn">Close Review</button>
+                    <button class="btn btn-primary" id="export-pdf-btn">
+                        <i class="fa-solid fa-print"></i> Export PDF Report
+                    </button>
+                </footer>
+            </div>
+        </div>
+
+        <!-- 6-STEP SIMULATION PIPELINE FULLSCREEN MODAL -->
+        <div id="simulation-modal" class="modal-overlay simulation-overlay hidden">
+            <div class="simulation-modal-content">
+                <header class="simulation-header">
+                    <div class="simulation-title-area">
+                        <i class="fa-solid fa-microchip simulation-logo-icon spinner-gear"></i>
+                        <div>
+                            <h2>NeuroFlow Solver Engine V2.0</h2>
+                            <p class="subtitle">Multi-Stage Clinical Hemodynamics Simulation Pipeline</p>
+                        </div>
+                    </div>
+                    <!-- Close button in case user wants to skip/abort simulation -->
+                    <button class="close-modal-btn" id="abort-sim-btn">&times;</button>
+                </header>
+
+                <div class="simulation-grid">
+                    <!-- Left: Visual Simulation Animation Viewer -->
+                    <div class="sim-visualizer-card">
+                        <div class="visualizer-header">
+                            <span class="visualizer-tag"><i class="fa-solid fa-video"></i> Real-time Visualization Telemetry</span>
+                            <span id="active-step-badge" class="active-step-badge">Step 1</span>
+                        </div>
+                        <div class="visualizer-display-pane" id="visualizer-pane">
+                            <!-- Step 01: Progress bar + flickering upload speed -->
+                            <div id="sim-visual-step1" class="sim-visual-container">
+                                <div class="upload-progress-card">
+                                    <i class="fa-solid fa-cloud-arrow-up large-upload-icon pulse"></i>
+                                    <div class="upload-text">Uploading DICOM Series...</div>
+                                    <div class="speed-indicator"><i class="fa-solid fa-bolt"></i> Speed: <span id="flicker-upload-speed">45.2 MB/s</span></div>
+                                    <div class="progress-bar-outer">
+                                        <div id="upload-progress-inner" class="progress-bar-inner" style="width: 0%;"></div>
+                                    </div>
+                                    <div class="progress-percent-label" id="upload-percent-label">0%</div>
+                                </div>
+                            </div>
+
+                            <!-- Step 02: Scanner flicker + neon overlay -->
+                            <div id="sim-visual-step2" class="sim-visual-container hidden">
+                                <div class="scanner-simulation">
+                                    <div class="axial-brain-viewer">
+                                        <div class="scanner-grid-bg"></div>
+                                        <!-- Dynamic axial slice drawing canvas -->
+                                        <canvas id="scanner-axial-canvas" width="300" height="300"></canvas>
+                                        <div class="laser-scanner-line"></div>
+                                        <div class="scanner-mask-label">VASCULAR AI MASK</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Step 03: Wireframe generator -->
+                            <div id="sim-visual-step3" class="sim-visual-container hidden">
+                                <div class="mesh-generation-simulation">
+                                    <canvas id="mesh-canvas" width="350" height="280"></canvas>
+                                    <div class="mesh-label">COMPUTATIONAL FINITE ELEMENT MESH (STL)</div>
+                                </div>
+                            </div>
+
+                            <!-- Step 04: Pulsatile wave graph -->
+                            <div id="sim-visual-step4" class="sim-visual-container hidden">
+                                <div class="boundary-conditions-simulation">
+                                    <canvas id="wave-canvas" width="350" height="250"></canvas>
+                                    <div class="wave-label">INFLOW VELOCITY PROFILE v(t) - CAROTID ARTERY</div>
+                                </div>
+                            </div>
+
+                            <!-- Step 05: Convergence graph -->
+                            <div id="sim-visual-step5" class="sim-visual-container hidden">
+                                <div class="solver-simulation">
+                                    <canvas id="convergence-canvas" width="350" height="250"></canvas>
+                                    <div class="convergence-label">NAVIER-STOKES RESIDUAL CONVERGENCE GRAPH</div>
+                                </div>
+                            </div>
+
+                            <!-- Step 06: Checking list checkboxes -->
+                            <div id="sim-visual-step6" class="sim-visual-container hidden">
+                                <div class="extraction-simulation">
+                                    <div class="extraction-radial-loader">
+                                        <div class="radial-spinner"></div>
+                                        <div class="radial-spinner-inner"><i class="fa-solid fa-chart-pie"></i></div>
+                                    </div>
+                                    <div class="extraction-checkboxes">
+                                        <div class="checkbox-line" id="chk-post-tawss">
+                                            <i class="fa-regular fa-square chk-box"></i>
+                                            <span class="chk-text">Integrating Time-Averaged Wall Shear Stress (TAWSS)</span>
+                                        </div>
+                                        <div class="checkbox-line" id="chk-post-osi">
+                                            <i class="fa-regular fa-square chk-box"></i>
+                                            <span class="chk-text">Computing Oscillatory Shear Index (OSI)</span>
+                                        </div>
+                                        <div class="checkbox-line" id="chk-post-morph">
+                                            <i class="fa-regular fa-square chk-box"></i>
+                                            <span class="chk-text">Calculating Localized Aspect Ratio & Diameter</span>
+                                        </div>
+                                        <div class="checkbox-line" id="chk-post-report">
+                                            <i class="fa-regular fa-square chk-box"></i>
+                                            <span class="chk-text">Assembling Clinical Risk Report Matrix</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Scrolling Terminal Output -->
+                    <div class="sim-terminal-card">
+                        <div class="terminal-header">
+                            <span class="terminal-tag"><i class="fa-solid fa-terminal"></i> SOLVER SHELL LOGS</span>
+                            <span class="terminal-dot green-dot"></span>
+                        </div>
+                        <div class="terminal-scroll-area" id="terminal-log-output">
+                            <!-- Logs will stream here dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom: Flow Steps indicator -->
+                <footer class="simulation-footer">
+                    <div class="pipeline-flow-steps">
+                        <div class="flow-step active" id="flow-s1">
+                            <div class="flow-dot">1</div>
+                            <span class="flow-label">Meta-Parsing</span>
+                        </div>
+                        <div class="flow-line"></div>
+                        <div class="flow-step" id="flow-s2">
+                            <div class="flow-dot">2</div>
+                            <span class="flow-label">AI Segmentation</span>
+                        </div>
+                        <div class="flow-line"></div>
+                        <div class="flow-step" id="flow-s3">
+                            <div class="flow-dot">3</div>
+                            <span class="flow-label">Mesh Generation</span>
+                        </div>
+                        <div class="flow-line"></div>
+                        <div class="flow-step" id="flow-s4">
+                            <div class="flow-dot">4</div>
+                            <span class="flow-label">Boundary Conditions</span>
+                        </div>
+                        <div class="flow-line"></div>
+                        <div class="flow-step" id="flow-s5">
+                            <div class="flow-dot">5</div>
+                            <span class="flow-label">CFD Execution</span>
+                        </div>
+                        <div class="flow-line"></div>
+                        <div class="flow-step" id="flow-s6">
+                            <div class="flow-dot">6</div>
+                            <span class="flow-label">Extraction & Reports</span>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+
+        <!-- Global Drag & Drop Overlay Visual -->
+        <div id="drag-drop-overlay" class="drag-drop-overlay hidden">
+            <div class="overlay-drop-msg">
+                <i class="fa-solid fa-cloud-arrow-up pulse-upload"></i>
+                <h2>Drop Files to Initiate CFD Simulation Pipeline</h2>
+                <p>DICOM Series | MRA Datasets | Patient Volumetric Scans</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application script -->
+    <script src="app.js"></script>
+</body>
+</html>

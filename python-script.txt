@@ -1,0 +1,16 @@
+build a local Python script pipeline for a medical fluid dynamics project named "NeuroFlow CFD". I need you to set up the foundational codebase structure to handle local DICOM file parsing without any heavy web frameworks (no FastAPI/REST APIs yet).
+
+Please create the following directory structure and populate the files with modular, professional code:
+
+1. Create a workspace directory named 'neuroflow-local-pipeline/'.
+2. Inside it, create a 'data/input/' directory for raw files.
+3. Create a 'src/' folder containing:
+   - 'config.py': Define standard physiological fluid properties as constants: BLOOD_DENSITY = 1060 (kg/m³) and BLOOD_VISCOSITY = 0.0035 (Pa·s).
+   - 'dicom_parser.py': Use the 'pydicom' library to safely extract 'PatientID', 'Modality', 'StudyDate', 'Rows', 'Columns', and 'SliceThickness'. Use getattr() to prevent crashing on missing metadata fields.
+4. Create a main entry point script named 'pipeline.py' at the root. This script must act as the orchestrator:
+   - Print a clean terminal header layout.
+   - Call the parser module to ingest a target file path.
+   - Stream professional step-by-step console logs to track execution.
+   - Include clean logging placeholders for Step 2 (Segmentation) and Step 3 (Post-Processing).
+
+Ensure all code follows strict Python typing hints and is modular so I can easily drop these exact src/ files into an asynchronous task worker (like Celery) in the next version. Do not install or write any web framework logic.
