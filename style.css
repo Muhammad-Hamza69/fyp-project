@@ -1,21 +1,31 @@
 /* Design System Variables */
 :root {
-    --bg-main: #f1f3f5; /* Light metallic background */
-    --bg-canvas: #F5F3F0; /* Warm off-white canvas layout background */
+    --bg-main: #f1f3f5;
+    /* Light metallic background */
+    --bg-canvas: #F5F3F0;
+    /* Warm off-white canvas layout background */
     --card-bg: #ffffff;
-    --text-primary: #1e293b; /* Dark slate */
-    --text-secondary: #64748b; /* Soft slate */
-    
+    --text-primary: #1e293b;
+    /* Dark slate */
+    --text-secondary: #64748b;
+    /* Soft slate */
+
     /* Alert Accents */
-    --color-high-risk: #B83232; /* High Risk Red */
-    --color-mod-risk: #C47D1A; /* Moderate Amber */
-    --color-low-risk: #1E8C4E; /* Low Risk Green */
-    
+    --color-high-risk: #B83232;
+    /* High Risk Red */
+    --color-mod-risk: #C47D1A;
+    /* Moderate Amber */
+    --color-low-risk: #1E8C4E;
+    /* Low Risk Green */
+
     /* Core Branding Colors */
-    --color-primary: #0f172a; /* Slate 900 */
-    --color-primary-light: #38bdf8; /* Sky 400 */
-    --color-accent: #2563eb; /* Royal blue */
-    
+    --color-primary: #0f172a;
+    /* Slate 900 */
+    --color-primary-light: #38bdf8;
+    /* Sky 400 */
+    --color-accent: #2563eb;
+    /* Royal blue */
+
     --border-radius: 8px;
     --transition-speed: 0.3s;
     --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -192,6 +202,29 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.card-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.patient-delete-btn {
+    background: none;
+    border: none;
+    color: #cbd5e1;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: all var(--transition-speed);
+}
+
+.patient-delete-btn:hover {
+    color: #ffffff;
+    background-color: var(--color-high-risk);
 }
 
 .patient-card-id {
@@ -409,8 +442,17 @@ body {
 }
 
 @keyframes tooltip-border-flash {
-    0%, 100% { border-color: var(--color-high-risk); box-shadow: 0 0 4px var(--color-high-risk); }
-    50% { border-color: #ffffff; box-shadow: 0 0 10px var(--color-high-risk); }
+
+    0%,
+    100% {
+        border-color: var(--color-high-risk);
+        box-shadow: 0 0 4px var(--color-high-risk);
+    }
+
+    50% {
+        border-color: #ffffff;
+        box-shadow: 0 0 10px var(--color-high-risk);
+    }
 }
 
 .canvas-overlay-hints {
@@ -426,6 +468,85 @@ body {
     padding: 4px 8px;
     border-radius: 4px;
     pointer-events: none;
+}
+
+/* View Pane Switching (2D Heatmap <-> 3D Nerve Model) */
+.view-pane {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.view-pane.hidden {
+    display: none;
+}
+
+/* 3D Nerve/Vascular Model Viewer */
+.neuro-3d-mount {
+    width: 100%;
+    height: 100%;
+    min-height: 380px;
+}
+
+.neuro-3d-mount canvas {
+    display: block;
+}
+
+.neuro-3d-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-secondary);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: rgba(255, 255, 255, 0.92);
+    padding: 8px 14px;
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    max-width: 80%;
+}
+
+.neuro-3d-loading.hidden {
+    display: none;
+}
+
+.neuro-3d-legend {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background-color: rgba(255, 255, 255, 0.85);
+    padding: 5px 10px;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin: 0 2px;
+}
+
+.legend-dot-blue {
+    background-color: #1F5F99;
+}
+
+.legend-dot-red {
+    background-color: #B83232;
 }
 
 /* Right Telemetry Panel */
@@ -522,7 +643,8 @@ body {
     background-color: var(--color-primary);
     transform-origin: bottom center;
     border-radius: 2px;
-    transform: translateX(-50%) rotate(-90deg); /* Starts at -90deg (0 on score) */
+    transform: translateX(-50%) rotate(-90deg);
+    /* Starts at -90deg (0 on score) */
     transition: transform 0.8s cubic-bezier(0.25, 0.8, 0.25, 1);
     z-index: 4;
 }
@@ -755,8 +877,15 @@ body {
 }
 
 @keyframes modal-slide-up {
-    from { transform: translateY(20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .modal-header {
@@ -923,7 +1052,7 @@ body {
     font-size: 12px;
 }
 
-.report-metrics-table th, 
+.report-metrics-table th,
 .report-metrics-table td {
     padding: 10px 12px;
     text-align: left;
@@ -996,7 +1125,8 @@ body {
 }
 
 .simulation-modal-content {
-    background-color: #0f172a; /* Slate 900 */
+    background-color: #0f172a;
+    /* Slate 900 */
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: #ffffff;
     width: 960px;
@@ -1009,7 +1139,8 @@ body {
 }
 
 .simulation-header {
-    background-color: #1e293b; /* Slate 800 */
+    background-color: #1e293b;
+    /* Slate 800 */
     padding: 16px 24px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
@@ -1033,8 +1164,13 @@ body {
 }
 
 @keyframes gear-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .simulation-header h2 {
@@ -1062,7 +1198,11 @@ body {
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     flex-direction: column;
-    background-color: #020617; /* Very dark slate */
+    background-color: #020617;
+    /* Very dark slate */
+    /* Grid items default to min-height:auto, which lets content grow past
+       the 480px track. Force it to respect the track so it never overflows. */
+    min-height: 0;
 }
 
 .visualizer-header {
@@ -1140,8 +1280,18 @@ body {
 }
 
 @keyframes upload-pulsate {
-    0%, 100% { transform: scale(1); opacity: 0.8; }
-    50% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 15px rgba(56, 189, 248, 0.2); }
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 1;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+    }
 }
 
 .upload-text {
@@ -1208,7 +1358,7 @@ body {
     right: 0;
     bottom: 0;
     background-size: 20px 20px;
-    background-image: 
+    background-image:
         linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
     z-index: 1;
@@ -1234,9 +1384,17 @@ body {
 }
 
 @keyframes scanner-sweep {
-    0% { top: 0%; }
-    50% { top: 100%; }
-    100% { top: 0%; }
+    0% {
+        top: 0%;
+    }
+
+    50% {
+        top: 100%;
+    }
+
+    100% {
+        top: 0%;
+    }
 }
 
 .scanner-mask-label {
@@ -1261,7 +1419,31 @@ body {
     justify-content: center;
 }
 
-.mesh-label, .wave-label, .convergence-label {
+/* Step 4: Boundary condition velocity wave */
+.boundary-conditions-simulation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Step 5: Solver convergence graph */
+.solver-simulation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.mesh-generation-simulation canvas,
+.boundary-conditions-simulation canvas,
+.solver-simulation canvas {
+    display: block;
+}
+
+.mesh-label,
+.wave-label,
+.convergence-label {
     margin-top: 10px;
     font-size: 8px;
     color: #64748b;
@@ -1335,7 +1517,11 @@ body {
 .sim-terminal-card {
     display: flex;
     flex-direction: column;
-    background-color: #020617; /* Monospace dark slate */
+    background-color: #020617;
+    /* Monospace dark slate */
+    /* Without this, terminal-scroll-area's content grows the grid track
+       past 480px instead of scrolling internally (min-height:auto default). */
+    min-height: 0;
 }
 
 .terminal-header {
@@ -1368,8 +1554,13 @@ body {
 }
 
 @keyframes blinker-dot {
-    from { opacity: 0.4; }
-    to { opacity: 1; }
+    from {
+        opacity: 0.4;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 .terminal-scroll-area {
@@ -1378,7 +1569,8 @@ body {
     padding: 16px;
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 11px;
-    color: #a7f3d0; /* Soft green */
+    color: #a7f3d0;
+    /* Soft green */
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -1391,13 +1583,34 @@ body {
     opacity: 0.9;
 }
 
-.log-line.info { color: #e2e8f0; }
-.log-line.success { color: #34d399; font-weight: bold; }
-.log-line.warning { color: #f59e0b; }
-.log-line.error { color: #ef4444; }
-.log-line.exec { color: #38bdf8; }
-.log-line.mesh { color: #a78bfa; }
-.log-line.bounds { color: #fb7185; }
+.log-line.info {
+    color: #e2e8f0;
+}
+
+.log-line.success {
+    color: #34d399;
+    font-weight: bold;
+}
+
+.log-line.warning {
+    color: #f59e0b;
+}
+
+.log-line.error {
+    color: #ef4444;
+}
+
+.log-line.exec {
+    color: #38bdf8;
+}
+
+.log-line.mesh {
+    color: #a78bfa;
+}
+
+.log-line.bounds {
+    color: #fb7185;
+}
 
 /* Blinking terminal cursor line */
 .terminal-caret {
@@ -1411,8 +1624,15 @@ body {
 }
 
 @keyframes cursor-blink {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 1; }
+
+    0%,
+    100% {
+        opacity: 0;
+    }
+
+    50% {
+        opacity: 1;
+    }
 }
 
 /* Bottom Flow Steps */
@@ -1486,10 +1706,11 @@ body {
     height: 2px;
     background-color: #334155;
     margin: 0 12px;
-    margin-bottom: 16px; /* Offset label spacing */
+    margin-bottom: 16px;
+    /* Offset label spacing */
 }
 
-.flow-step.completed + .flow-line {
+.flow-step.completed+.flow-line {
     background-color: var(--color-low-risk);
 }
 
@@ -1546,15 +1767,22 @@ body {
 
 /* Print CSS Stylesheet definition */
 @media print {
+
     /* Hide EVERYTHING in dashboard layout */
-    body, html, .main-header, .dashboard-grid, .modal-overlay, .print-actions, .close-modal-btn {
+    body,
+    html,
+    .main-header,
+    .dashboard-grid,
+    .modal-overlay,
+    .print-actions,
+    .close-modal-btn {
         background-color: #ffffff !important;
         background: #ffffff !important;
         box-shadow: none !important;
         margin: 0 !important;
         padding: 0 !important;
     }
-    
+
     /* Make the specific modal fill the page */
     #report-modal {
         position: absolute !important;
@@ -1570,7 +1798,7 @@ body {
         overflow: visible !important;
         pointer-events: auto !important;
     }
-    
+
     .report-modal-content {
         width: 100% !important;
         box-shadow: none !important;
@@ -1581,43 +1809,59 @@ body {
         display: block !important;
         animation: none !important;
     }
-    
-    .modal-header, .modal-footer {
+
+    .modal-header,
+    .modal-footer {
         display: none !important;
     }
-    
+
     .printable-report-body {
         padding: 0 !important;
         margin: 0 !important;
         overflow: visible !important;
     }
-    
+
     .report-layout-columns {
         grid-template-columns: 280px 1fr !important;
         gap: 16px !important;
     }
-    
+
     .report-canvas-placeholder-container {
         border: 1px solid #000000 !important;
         background-color: #ffffff !important;
     }
-    
+
     .report-metrics-table th {
         background-color: #f1f5f9 !important;
         color: #000000 !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
-    
+
     .report-meta-grid {
         background-color: #f1f5f9 !important;
         border: 1px solid #000000 !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
-    
+
     /* Avoid splits in critical components */
-    .report-section, .report-layout-columns, .report-footer-signatures {
+    .report-section,
+    .report-layout-columns,
+    .report-footer-signatures {
         page-break-inside: avoid;
     }
+}
+
+border: 1px solid #000000 !important;
+-webkit-print-color-adjust: exact;
+print-color-adjust: exact;
+}
+
+/* Avoid splits in critical components */
+.report-section,
+.report-layout-columns,
+.report-footer-signatures {
+    page-break-inside: avoid;
+}
 }

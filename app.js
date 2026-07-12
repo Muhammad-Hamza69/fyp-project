@@ -30,11 +30,6 @@ function lerpColor(color1, color2, factor) {
 const patientDatabase = {
     "PT-2025-0041": {
         id: "PT-2025-0041",
-        riskLevel: "High",
-        badgeClass: "badge-high",
-        compositeRisk: 88,
-        riskLabel: "High Rupture Risk",
-        riskLabelClass: "color-high-risk",
         morphology: {
             maxDiameter: 8.4,
             aspectRatio: 2.1
@@ -49,11 +44,6 @@ const patientDatabase = {
     },
     "PT-2025-0037": {
         id: "PT-2025-0037",
-        riskLevel: "Moderate",
-        badgeClass: "badge-moderate",
-        compositeRisk: 54,
-        riskLabel: "Moderate Risk Profile",
-        riskLabelClass: "color-mod-risk",
         morphology: {
             maxDiameter: 5.2,
             aspectRatio: 1.4
@@ -68,11 +58,6 @@ const patientDatabase = {
     },
     "PT-2025-0039": {
         id: "PT-2025-0039",
-        riskLevel: "Low",
-        badgeClass: "badge-low",
-        compositeRisk: 22,
-        riskLabel: "Stable / Low Risk",
-        riskLabelClass: "color-low-risk",
         morphology: {
             maxDiameter: 3.1,
             aspectRatio: 0.9
@@ -87,6 +72,35 @@ const patientDatabase = {
     }
 };
 
+// Composite Risk Index: derived (not stored) from the aneurysm dome's live
+// TAWSS/OSI plus morphology, so it can never drift from the displayed metrics.
+// Weights: TAWSS 35% | OSI 30% | Max Diameter 20% | Aspect Ratio 15%
+function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+}
+
+function computeCompositeRisk(patient) {
+    const domeZone = patient.zones.find(z => z.name === "Aneurysm Dome");
+    const { maxDiameter, aspectRatio } = patient.morphology;
+
+    const tawssScore = clamp01((1.5 - domeZone.tawss) / (1.5 - 0.15)) * 100;
+    const osiScore = clamp01((domeZone.osi - 0.03) / (0.35 - 0.03)) * 100;
+    const diameterScore = clamp01((maxDiameter - 2.0) / (10.0 - 2.0)) * 100;
+    const aspectScore = clamp01((aspectRatio - 0.7) / (2.5 - 0.7)) * 100;
+
+    const composite = (tawssScore * 0.35) + (osiScore * 0.30) + (diameterScore * 0.20) + (aspectScore * 0.15);
+    return Math.round(composite);
+}
+
+function getRiskTier(score) {
+    if (score >= 75) {
+        return { riskLevel: "High", badgeClass: "badge-high", riskLabel: "High Rupture Risk", riskLabelClass: "color-high-risk" };
+    } else if (score >= 45) {
+        return { riskLevel: "Moderate", badgeClass: "badge-moderate", riskLabel: "Moderate Risk Profile", riskLabelClass: "color-mod-risk" };
+    }
+    return { riskLevel: "Low", badgeClass: "badge-low", riskLabel: "Stable / Low Risk", riskLabelClass: "color-low-risk" };
+}
+
 // Global App State
 let activePatient = patientDatabase["PT-2025-0041"];
 let currentMapMode = "TAWSS"; // TAWSS or OSI
@@ -100,6 +114,13 @@ const toggleTawssBtn = document.getElementById("toggle-tawss-btn");
 const toggleOsiBtn = document.getElementById("toggle-osi-btn");
 const mainCanvas = document.getElementById("heatmap-canvas");
 const mainCtx = mainCanvas.getContext("2d");
+
+// DOM Elements - 2D/3D View Switching
+const view2dBtn = document.getElementById("view-2d-btn");
+const view3dBtn = document.getElementById("view-3d-btn");
+const view2dPane = document.getElementById("view-2d-pane");
+const view3dPane = document.getElementById("view-3d-pane");
+const workspaceTitleEl = document.getElementById("workspace-title");
 
 // DOM Elements - Tooltip
 const tooltipEl = document.getElementById("canvas-tooltip");
@@ -161,7 +182,7 @@ function initApp() {
     renderPatientList();
     loadPatientData(activePatient);
     setupEventListeners();
-    
+
     // Set current date in report
     const today = new Date().toISOString().split('T')[0];
     reportDateGeneratedEl.textContent = today;
@@ -174,43 +195,71 @@ function renderPatientList() {
         const card = document.createElement("div");
         card.className = `patient-card ${patient.id === activePatient.id ? 'active' : ''}`;
         card.dataset.id = patient.id;
-        
-        let badgeColorClass = "badge-low";
-        if (patient.riskLevel === "High") badgeColorClass = "badge-high";
-        else if (patient.riskLevel === "Moderate") badgeColorClass = "badge-moderate";
+
+        const score = computeCompositeRisk(patient);
+        const tier = getRiskTier(score);
 
         card.innerHTML = `
             <div class="card-header">
                 <span class="patient-card-id">${patient.id}</span>
-                <span class="status-badge ${badgeColorClass}">${patient.riskLevel}</span>
+                <div class="card-header-right">
+                    <span class="status-badge ${tier.badgeClass}">${tier.riskLevel}</span>
+                    <button class="patient-delete-btn" type="button" title="Remove this case" aria-label="Remove case ${patient.id}">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
             </div>
             <div class="patient-card-details">
-                <span>CRI: ${patient.compositeRisk}/100</span>
+                <span>CRI: ${score}/100</span>
                 <span>Dia: ${patient.morphology.maxDiameter}mm</span>
             </div>
         `;
-        
+
         card.addEventListener("click", () => {
             document.querySelectorAll(".patient-card").forEach(c => c.classList.remove("active"));
             card.classList.add("active");
             loadPatientData(patientDatabase[patient.id]);
         });
-        
+
+        card.querySelector(".patient-delete-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            deletePatient(patient.id);
+        });
+
         patientListContainer.appendChild(card);
     });
+}
+
+// Remove an uploaded/mock case from the dashboard entirely
+function deletePatient(patientId) {
+    if (Object.keys(patientDatabase).length <= 1) {
+        alert("At least one patient case must remain loaded.");
+        return;
+    }
+
+    const confirmed = confirm(`Remove case ${patientId} from the dashboard? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const wasActive = activePatient.id === patientId;
+    delete patientDatabase[patientId];
+
+    if (wasActive) {
+        loadPatientData(Object.values(patientDatabase)[0]);
+    }
+
+    renderPatientList();
 }
 
 // 3. Load Selected Patient Data
 function loadPatientData(patient) {
     activePatient = patient;
-    
+
+    const tier = getRiskTier(computeCompositeRisk(patient));
+
     // Header banner updates
     activePatientIdEl.textContent = patient.id;
-    activePatientStatusEl.textContent = patient.riskLevel;
-    activePatientStatusEl.className = "status-badge";
-    if (patient.riskLevel === "High") activePatientStatusEl.classList.add("badge-high");
-    else if (patient.riskLevel === "Moderate") activePatientStatusEl.classList.add("badge-moderate");
-    else activePatientStatusEl.classList.add("badge-low");
+    activePatientStatusEl.textContent = tier.riskLevel;
+    activePatientStatusEl.className = `status-badge ${tier.badgeClass}`;
 
     // Morphology updates
     morphMaxDiameterEl.textContent = patient.morphology.maxDiameter.toFixed(1);
@@ -221,7 +270,10 @@ function loadPatientData(patient) {
 
     // Radial Telemetry Progress Indicators
     updateRadialGauges();
-    
+
+    // 3D Nerve/Vascular Model Redraw (no-op until the 3D tab has been opened)
+    if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(patient, currentMapMode);
+
     // Hide active tooltips on patient switch
     tooltipEl.classList.add("hidden");
     hoverZone = null;
@@ -231,7 +283,7 @@ function loadPatientData(patient) {
 // Maps value between 1F5F99 (Stable Blue) and B83232 (High Risk Red)
 function getInterpolatedColor(zoneValue, isAneurysm) {
     let factor = 0;
-    
+
     if (currentMapMode === "TAWSS") {
         // TAWSS: Critical value is low (< 0.4 Pa), Healthy/Stable is high (~1.5+ Pa)
         // Reverse normalization: 1.0 (High Risk) -> TAWSS = 0.15 Pa, 0.0 (Stable) -> TAWSS = 1.5 Pa
@@ -243,13 +295,13 @@ function getInterpolatedColor(zoneValue, isAneurysm) {
         const val = parseFloat(zoneValue);
         factor = Math.max(0, Math.min(1, (val - 0.03) / (0.35 - 0.03)));
     }
-    
+
     // Adjust weights based on anatomical properties
     // Non-aneurysm parent arteries should generally stay in the blue-to-greenish zone (lower risk factor)
     if (!isAneurysm) {
         factor = factor * 0.2; // dampen the risk color gradient on parent artery
     }
-    
+
     return lerpColor("#1F5F99", "#B83232", factor);
 }
 
@@ -258,7 +310,7 @@ function drawHeatmap() {
 
     // Get color mappings for zones based on active patient metrics
     const colors = activePatient.zones.map(z => getInterpolatedColor(currentMapMode === "TAWSS" ? z.tawss : z.osi, z.isAneurysm));
-    
+
     const colorInlet = colors[0];
     const colorOutlet = colors[1];
     const colorNeck = colors[2];
@@ -275,7 +327,7 @@ function drawHeatmap() {
     mainCtx.lineWidth = 42;
     mainCtx.lineCap = "round";
     mainCtx.lineJoin = "round";
-    
+
     mainCtx.beginPath();
     mainCtx.moveTo(80, 278);
     mainCtx.quadraticCurveTo(320, 310, 570, 278);
@@ -341,11 +393,11 @@ function drawHeatmap() {
         mainCtx.lineWidth = 2;
         mainCtx.shadowColor = "rgba(255, 255, 255, 0.8)";
         mainCtx.shadowBlur = 8;
-        
+
         mainCtx.beginPath();
         mainCtx.arc(hoverZone.x, hoverZone.y, hoverZone.radius, 0, 2 * Math.PI);
         mainCtx.stroke();
-        
+
         // Reset shadows
         mainCtx.shadowBlur = 0;
     }
@@ -354,9 +406,10 @@ function drawHeatmap() {
 // 5. Radial Progress Telemetry Controllers
 function updateRadialGauges() {
     // 1. Composite Risk Index Gauge (Needle rotation + colors)
-    const score = activePatient.compositeRisk;
+    const score = computeCompositeRisk(activePatient);
+    const tier = getRiskTier(score);
     compositeRiskScoreEl.textContent = score;
-    
+
     // Set needle rotation: maps 0-100 score to -90deg to +90deg (180deg sweep)
     const needleRotation = -90 + (score / 100) * 180;
     compositeNeedleEl.style.transform = `translateX(-50%) rotate(${needleRotation}deg)`;
@@ -365,7 +418,7 @@ function updateRadialGauges() {
     const cRadius = 50;
     const halfCircumference = Math.PI * cRadius; // 157.08
     compositeRingFill.style.strokeDasharray = `${halfCircumference} ${halfCircumference}`;
-    
+
     // Draw half circular ring sweep (value mapped to half of circumference)
     const filled = (score / 100) * halfCircumference;
     const dashOffset = halfCircumference - filled;
@@ -373,32 +426,24 @@ function updateRadialGauges() {
 
     // Dial Needle Color & Label Class Mapping
     let riskColor = "var(--color-low-risk)";
-    let label = "Low Risk Profile";
-    if (score >= 75) {
-        riskColor = "var(--color-high-risk)";
-        label = "High Rupture Risk";
-        compositeRiskLabelEl.className = "risk-label-text color-high-risk";
-    } else if (score >= 45) {
-        riskColor = "var(--color-mod-risk)";
-        label = "Moderate Risk Profile";
-        compositeRiskLabelEl.className = "risk-label-text color-mod-risk";
-    } else {
-        compositeRiskLabelEl.className = "risk-label-text color-low-risk";
-    }
+    if (tier.riskLevel === "High") riskColor = "var(--color-high-risk)";
+    else if (tier.riskLevel === "Moderate") riskColor = "var(--color-mod-risk)";
+
     compositeRingFill.style.stroke = riskColor;
-    compositeRiskLabelEl.textContent = label;
+    compositeRiskLabelEl.className = `risk-label-text ${tier.riskLabelClass}`;
+    compositeRiskLabelEl.textContent = tier.riskLabel;
 
     // 2. TAWSS Gauge (Dome value)
     const domeZone = activePatient.zones.find(z => z.name === "Aneurysm Dome");
     const tawssVal = domeZone.tawss;
     tawssGaugeValEl.textContent = tawssVal.toFixed(2);
-    
+
     // Map TAWSS progress ring: Max TAWSS range 2.0 Pa
     const progressCircumference = 2 * Math.PI * 32; // Radius 32 -> Circumference = 201.06
     tawssProgressFill.style.strokeDasharray = progressCircumference;
     const tawssFactor = Math.min(1.0, tawssVal / 2.0);
     tawssProgressFill.style.strokeDashoffset = progressCircumference - (tawssFactor * progressCircumference);
-    
+
     // TAWSS Threshold alert check (< 0.4 Pa)
     if (tawssVal < 0.4) {
         tawssProgressFill.style.stroke = "var(--color-high-risk)";
@@ -411,12 +456,12 @@ function updateRadialGauges() {
     // 3. OSI Gauge (Dome value)
     const osiVal = domeZone.osi;
     osiGaugeValEl.textContent = osiVal.toFixed(2);
-    
+
     // Map OSI progress ring: Max OSI range 0.5
     osiProgressFill.style.strokeDasharray = progressCircumference;
     const osiFactor = Math.min(1.0, osiVal / 0.5);
     osiProgressFill.style.strokeDashoffset = progressCircumference - (osiFactor * progressCircumference);
-    
+
     // OSI Threshold alert check (> 0.3)
     if (osiVal > 0.3) {
         osiProgressFill.style.stroke = "var(--color-high-risk)";
@@ -435,6 +480,7 @@ function setupEventListeners() {
         toggleOsiBtn.classList.remove("active");
         currentMapMode = "TAWSS";
         drawHeatmap();
+        if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
     });
 
     toggleOsiBtn.addEventListener("click", () => {
@@ -442,6 +488,29 @@ function setupEventListeners() {
         toggleTawssBtn.classList.remove("active");
         currentMapMode = "OSI";
         drawHeatmap();
+        if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
+    });
+
+    // 2D Heatmap / 3D Nerve Model view switching
+    view2dBtn.addEventListener("click", () => {
+        view2dBtn.classList.add("active");
+        view3dBtn.classList.remove("active");
+        view2dPane.classList.remove("hidden");
+        view3dPane.classList.add("hidden");
+        workspaceTitleEl.textContent = "2D Hemodynamic Heatmap";
+    });
+
+    view3dBtn.addEventListener("click", () => {
+        view3dBtn.classList.add("active");
+        view2dBtn.classList.remove("active");
+        view3dPane.classList.remove("hidden");
+        view2dPane.classList.add("hidden");
+        workspaceTitleEl.textContent = "3D Neuro-Vascular Risk Model";
+
+        if (window.NeuroViewer) {
+            window.NeuroViewer.init("neuro-3d-mount");
+            window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
+        }
     });
 
     // Hover telemetry event triggers
@@ -458,16 +527,16 @@ function setupEventListeners() {
     expandCaseBtn.addEventListener("click", openReportModal);
     closeReportBtn.addEventListener("click", () => reportModalEl.classList.add("hidden"));
     cancelReportBtn.addEventListener("click", () => reportModalEl.classList.add("hidden"));
-    
+
     // PDF Report Generator with canvas conversion
     exportPdfBtn.addEventListener("click", () => {
         const reportCanvas = document.getElementById("report-static-canvas");
         const reportCtx = reportCanvas.getContext("2d");
-        
+
         // Render current canvas state directly into the report's static canvas structure
         reportCtx.clearRect(0, 0, reportCanvas.width, reportCanvas.height);
         reportCtx.drawImage(mainCanvas, 0, 0, reportCanvas.width, reportCanvas.height);
-        
+
         // Convert to static image file to bulletproof the browser print engine
         const staticImgId = "report-static-img";
         let reportImg = document.getElementById(staticImgId);
@@ -481,11 +550,11 @@ function setupEventListeners() {
             reportImg.style.border = "1px solid #cbd5e1";
             reportCanvas.parentNode.insertBefore(reportImg, reportCanvas);
         }
-        
+
         reportImg.src = mainCanvas.toDataURL("image/png");
         reportCanvas.style.display = "none";
         reportImg.style.display = "block";
-        
+
         // Trigger browser print screen
         window.print();
     });
@@ -501,12 +570,12 @@ function handleCanvasHover(e) {
     const mouseY = e.clientY - rect.top;
 
     let foundZone = null;
-    
+
     // Iterate hotspots using radial boundaries (optimized layout approach)
     for (let i = 0; i < activePatient.zones.length; i++) {
         const zone = activePatient.zones[i];
         const distance = Math.hypot(mouseX - zone.x, mouseY - zone.y);
-        
+
         if (distance < zone.radius) {
             foundZone = zone;
             break;
@@ -523,18 +592,18 @@ function handleCanvasHover(e) {
         // Snap tooltip slightly above the hotspot center
         const tooltipX = foundZone.x + rect.left - 90; // center tooltip
         const tooltipY = foundZone.y + rect.top - 120; // draw above node
-        
+
         tooltipEl.style.left = `${tooltipX}px`;
         tooltipEl.style.top = `${tooltipY}px`;
         tooltipEl.classList.remove("hidden");
-        
+
         // Set metadata content
         tooltipNodeIdEl.textContent = foundZone.id;
         tooltipTawssValEl.textContent = `${foundZone.tawss.toFixed(2)} Pa`;
         tooltipOsiValEl.textContent = foundZone.osi.toFixed(2);
-        
+
         const isHighRisk = foundZone.tawss < 0.4 || foundZone.osi > 0.3;
-        
+
         if (foundZone.isAneurysm) {
             if (isHighRisk) {
                 tooltipRiskTagEl.textContent = "High Risk";
@@ -561,24 +630,24 @@ function handleCanvasHover(e) {
 // 8. Clinical Report Modal Data Renderer
 function openReportModal() {
     reportPatientIdEl.textContent = activePatient.id;
-    
+
+    const compositeScore = computeCompositeRisk(activePatient);
+    const tier = getRiskTier(compositeScore);
+
     // Inject Risk badges
-    reportRiskBadgeEl.textContent = activePatient.riskLevel + " RISK";
-    reportRiskBadgeEl.className = "status-badge";
-    if (activePatient.riskLevel === "High") reportRiskBadgeEl.classList.add("badge-high");
-    else if (activePatient.riskLevel === "Moderate") reportRiskBadgeEl.classList.add("badge-moderate");
-    else reportRiskBadgeEl.classList.add("badge-low");
+    reportRiskBadgeEl.textContent = tier.riskLevel + " RISK";
+    reportRiskBadgeEl.className = `status-badge ${tier.badgeClass}`;
 
     const domeZone = activePatient.zones.find(z => z.name === "Aneurysm Dome");
     const neckZone = activePatient.zones.find(z => z.name === "Aneurysm Neck");
 
     reportTawssValEl.textContent = `${domeZone.tawss.toFixed(2)} Pa`;
-    reportTawssStatusEl.innerHTML = domeZone.tawss < 0.4 
+    reportTawssStatusEl.innerHTML = domeZone.tawss < 0.4
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> Low Shear</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
     reportOsiValEl.textContent = domeZone.osi.toFixed(2);
-    reportOsiStatusEl.innerHTML = domeZone.osi > 0.3 
+    reportOsiStatusEl.innerHTML = domeZone.osi > 0.3
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> Flow Stagnation</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
@@ -592,27 +661,20 @@ function openReportModal() {
         ? `<span class="color-high-risk">Elongated (&gt;1.5)</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
-    reportCompositeScoreEl.textContent = `${activePatient.compositeRisk}/100`;
+    reportCompositeScoreEl.textContent = `${compositeScore}/100`;
     let compositeStatusText = "STABLE / LOW RISK";
-    let compositeClass = "color-low-risk";
-    
-    if (activePatient.compositeRisk >= 75) {
-        compositeStatusText = "CRITICAL / URGENT INTERVENTION";
-        compositeClass = "color-high-risk";
-    } else if (activePatient.compositeRisk >= 45) {
-        compositeStatusText = "ELEVATED PROGRESSION / MONITOR";
-        compositeClass = "color-mod-risk";
-    }
-    
+    if (tier.riskLevel === "High") compositeStatusText = "CRITICAL / URGENT INTERVENTION";
+    else if (tier.riskLevel === "Moderate") compositeStatusText = "ELEVATED PROGRESSION / MONITOR";
+
     reportCompositeStatusEl.textContent = compositeStatusText;
-    reportCompositeStatusEl.className = `bold ${compositeClass}`;
-    
+    reportCompositeStatusEl.className = `bold ${tier.riskLabelClass}`;
+
     reportClinicalTextEl.textContent = activePatient.clinicalAssessment;
 
     // Show report canvas placeholder initially
     const reportCanvas = document.getElementById("report-static-canvas");
     const reportImg = document.getElementById("report-static-img");
-    
+
     reportCanvas.style.display = "block";
     if (reportImg) reportImg.style.display = "none";
 
@@ -656,7 +718,7 @@ function setupUploadHandlers() {
     dragDropOverlay.addEventListener("drop", (e) => {
         e.preventDefault();
         dragDropOverlay.classList.add("hidden");
-        
+
         if (e.dataTransfer.files.length > 0) {
             runCfdSimulation(e.dataTransfer.files[0]);
         }
@@ -674,7 +736,7 @@ function writeTerminalLog(text, type = "info") {
     p.className = `log-line ${type}`;
     p.innerHTML = `&gt; ${text}`;
     terminalLogOutput.appendChild(p);
-    
+
     // Scroll shell terminal to the bottom
     terminalLogOutput.scrollTop = terminalLogOutput.scrollHeight;
 }
@@ -684,7 +746,7 @@ async function runCfdSimulation(fileObject) {
     simulationModalEl.classList.remove("hidden");
     terminalLogOutput.innerHTML = "";
     activeStepBadge.textContent = "Step 01 / 06";
-    
+
     // Set flow steps visual indicators to default
     document.querySelectorAll(".flow-step").forEach(s => s.className = "flow-step");
     document.getElementById("flow-s1").classList.add("active");
@@ -699,11 +761,11 @@ async function runCfdSimulation(fileObject) {
     writeTerminalLog(`Initializing upload payload from file: ${fileName}...`, "info");
     await sleep(400);
     writeTerminalLog("[INFO] Initializing DICOM payload stream...", "info");
-    
+
     const speedSpan = document.getElementById("flicker-upload-speed");
     const progressInner = document.getElementById("upload-progress-inner");
     const percentLabel = document.getElementById("upload-percent-label");
-    
+
     // Ingest text if it is a File object
     let fileText = "";
     if (fileObject && typeof fileObject !== "string") {
@@ -743,16 +805,16 @@ async function runCfdSimulation(fileObject) {
         }
         const studyDateMatch = fileText.match(/STUDY_DATE\s*=\s*([^\r\n]+)/i);
         if (studyDateMatch) studyDate = studyDateMatch[1].trim();
-        
+
         const modalityMatch = fileText.match(/MODALITY\s*=\s*([^\r\n(]+)/i);
         if (modalityMatch) modality = modalityMatch[1].trim();
-        
+
         const rowsMatch = fileText.match(/ROWS\s*=\s*(\d+)/i);
         if (rowsMatch) rows = parseInt(rowsMatch[1]);
-        
+
         const colsMatch = fileText.match(/COLUMNS\s*=\s*(\d+)/i);
         if (colsMatch) columns = parseInt(colsMatch[1]);
-        
+
         const thicknessMatch = fileText.match(/SLICE_THICKNESS\s*=\s*([\d.]+)/i);
         if (thicknessMatch) sliceThickness = parseFloat(thicknessMatch[1]);
 
@@ -775,15 +837,15 @@ async function runCfdSimulation(fileObject) {
     for (let progress = 0; progress <= 100; progress += 10) {
         progressInner.style.width = `${progress}%`;
         percentLabel.textContent = `${progress}%`;
-        
+
         // Flickering upload speed readout
         const speed = (44 + Math.random() * 3).toFixed(1);
         speedSpan.textContent = `${speed} MB/s`;
-        
+
         if (progress === 30) writeTerminalLog(`[SUCCESS] Ingested ${numSlices} slices in series.`, "success");
         if (progress === 60) writeTerminalLog(`[PARSING] Extracting matrix size: ${rows} x ${columns} pixels...`, "exec");
         if (progress === 80) writeTerminalLog(`[PARSING] Detecting slice thickness: ${sliceThickness.toFixed(2)}mm...`, "exec");
-        
+
         await sleep(300);
     }
     writeTerminalLog(`[INFO] Patient ID '${patientId}' anonymized successfully.`, "info");
@@ -793,42 +855,42 @@ async function runCfdSimulation(fileObject) {
     document.getElementById("flow-s1").className = "flow-step completed";
     document.getElementById("flow-s2").className = "flow-step active";
     activeStepBadge.textContent = "Step 02 / 06";
-    
+
     // --- STEP 2: Automated AI Segmentation ---
     document.getElementById("sim-visual-step1").classList.add("hidden");
     document.getElementById("sim-visual-step2").classList.remove("hidden");
-    
+
     writeTerminalLog("[MODEL] Loading NeuroFlow-Seg-v2 U-Net weights...", "info");
     await sleep(400);
     writeTerminalLog("[EXEC] Segmenting parent artery structures...", "exec");
-    
+
     // AI scanner animation ( axial scanner draw loop )
     const scannerCanvas = document.getElementById("scanner-axial-canvas");
     const scanCtx = scannerCanvas.getContext("2d");
     let scanFrame = 0;
-    
+
     // Axial segment loop (approx 2.5 seconds)
     const scanInterval = setInterval(() => {
         scanCtx.clearRect(0, 0, 300, 300);
-        
+
         // Draw randomized neural network vascular vectors representing 2D artery segments
         scanCtx.strokeStyle = "rgba(56, 189, 248, 0.4)";
         scanCtx.lineWidth = 2;
         scanCtx.beginPath();
         for (let j = 0; j < 4; j++) {
-            scanCtx.arc(150 + Math.sin(scanFrame/10 + j)*30, 150 + Math.cos(scanFrame/10 + j)*30, 20 + j*15, 0, 2*Math.PI);
+            scanCtx.arc(150 + Math.sin(scanFrame / 10 + j) * 30, 150 + Math.cos(scanFrame / 10 + j) * 30, 20 + j * 15, 0, 2 * Math.PI);
         }
         scanCtx.stroke();
-        
+
         // Neon-blue overlay mask drawing (target aneurysm zone)
         scanCtx.fillStyle = "rgba(56, 189, 248, 0.2)";
         scanCtx.strokeStyle = "#38bdf8";
         scanCtx.lineWidth = 3;
         scanCtx.beginPath();
-        scanCtx.arc(150 + Math.sin(scanFrame/5)*20, 120 + Math.cos(scanFrame/5)*20, 35, 0, 2*Math.PI);
+        scanCtx.arc(150 + Math.sin(scanFrame / 5) * 20, 120 + Math.cos(scanFrame / 5) * 20, 35, 0, 2 * Math.PI);
         scanCtx.fill();
         scanCtx.stroke();
-        
+
         scanFrame++;
     }, 50);
 
@@ -849,51 +911,51 @@ async function runCfdSimulation(fileObject) {
     // --- STEP 3: Surface Mesh Generation ---
     document.getElementById("sim-visual-step2").classList.add("hidden");
     document.getElementById("sim-visual-step3").classList.remove("hidden");
-    
+
     writeTerminalLog("[MESH] Converting voxel data to STL surface topology...", "mesh");
-    
+
     const meshCanvas = document.getElementById("mesh-canvas");
     const meshCtx = meshCanvas.getContext("2d");
     let meshFrame = 0;
-    
+
     // Mesh generation loop (rotating wireframe)
     const meshInterval = setInterval(() => {
         meshCtx.clearRect(0, 0, 350, 280);
-        
+
         meshCtx.strokeStyle = "rgba(167, 139, 250, 0.4)"; // Purple mesh
         meshCtx.lineWidth = 1;
-        
+
         // Draw rotating 3D-like grid geometry of lines
         const center = { x: 175, y: 140 };
-        const radius = 60 + Math.sin(meshFrame/15)*5;
-        
+        const radius = 60 + Math.sin(meshFrame / 15) * 5;
+
         // Draw longitudinal rings
         for (let slice = 0; slice < 10; slice++) {
             const rotX = (slice / 10) * Math.PI;
             meshCtx.beginPath();
-            
+
             for (let angle = 0; angle <= 2 * Math.PI; angle += 0.2) {
                 // simple 3D projections
-                const x = center.x + radius * Math.cos(angle) * Math.sin(rotX + meshFrame/50);
+                const x = center.x + radius * Math.cos(angle) * Math.sin(rotX + meshFrame / 50);
                 const y = center.y + radius * Math.sin(angle);
-                
+
                 if (angle === 0) meshCtx.moveTo(x, y);
                 else meshCtx.lineTo(x, y);
             }
             meshCtx.closePath();
             meshCtx.stroke();
         }
-        
+
         // Draw lateral lines
         for (let lat = -5; lat <= 5; lat++) {
             const z = (lat / 6) * radius;
-            const latRadius = Math.sqrt(radius*radius - z*z);
+            const latRadius = Math.sqrt(radius * radius - z * z);
             meshCtx.beginPath();
-            
+
             for (let angle = 0; angle <= 2 * Math.PI; angle += 0.2) {
-                const x = center.x + latRadius * Math.cos(angle + meshFrame/50);
+                const x = center.x + latRadius * Math.cos(angle + meshFrame / 50);
                 const y = center.y + z;
-                
+
                 if (angle === 0) meshCtx.moveTo(x, y);
                 else meshCtx.lineTo(x, y);
             }
@@ -923,17 +985,17 @@ async function runCfdSimulation(fileObject) {
     // --- STEP 4: Boundary Condition Assignment ---
     document.getElementById("sim-visual-step3").classList.add("hidden");
     document.getElementById("sim-visual-step4").classList.remove("hidden");
-    
+
     writeTerminalLog("[BOUNDS] Applying patient-specific internal carotid artery velocity profile...", "bounds");
-    
+
     const waveCanvas = document.getElementById("wave-canvas");
     const waveCtx = waveCanvas.getContext("2d");
     let waveFrame = 0;
-    
+
     // Wave plotting loop
     const waveInterval = setInterval(() => {
         waveCtx.clearRect(0, 0, 350, 250);
-        
+
         // Draw static grid lines
         waveCtx.strokeStyle = "rgba(255, 255, 255, 0.05)";
         waveCtx.lineWidth = 1;
@@ -941,23 +1003,23 @@ async function runCfdSimulation(fileObject) {
             waveCtx.beginPath(); waveCtx.moveTo(i, 0); waveCtx.lineTo(i, 250); waveCtx.stroke();
             waveCtx.beginPath(); waveCtx.moveTo(0, i); waveCtx.lineTo(350, i); waveCtx.stroke();
         }
-        
+
         // Draw the ECG-like running velocity wave (pulsatile blood wave)
         waveCtx.strokeStyle = "#fb7185"; // Pinkish-red wave
         waveCtx.lineWidth = 2.5;
         waveCtx.beginPath();
-        
+
         for (let x = 0; x < 350; x++) {
             // Formula for carotid pulsatile flow wave
             const t = (x + waveFrame) * 0.04;
             // Base cardiac cycle shape: high systolic peak + dicrotic notch
             let yVal = 140 - 50 * Math.sin(t) - 20 * Math.max(0, Math.sin(2 * t)) + 15 * Math.sin(3 * t + 1);
-            
+
             if (x === 0) waveCtx.moveTo(x, yVal);
             else waveCtx.lineTo(x, yVal);
         }
         waveCtx.stroke();
-        
+
         waveFrame += 2;
     }, 30);
 
@@ -978,25 +1040,25 @@ async function runCfdSimulation(fileObject) {
     // --- STEP 5: CFD Solver Execution ---
     document.getElementById("sim-visual-step4").classList.add("hidden");
     document.getElementById("sim-visual-step5").classList.remove("hidden");
-    
+
     writeTerminalLog("[SOLVER] Initializing transient Navier-Stokes equations...", "info");
-    
+
     const convCanvas = document.getElementById("convergence-canvas");
     const convCtx = convCanvas.getContext("2d");
     let convPoints = [];
     let convFrame = 0;
-    
+
     // Convergence line generator
     const convInterval = setInterval(() => {
         convCtx.clearRect(0, 0, 350, 250);
-        
+
         // Draw logarithmic grid lines
         convCtx.strokeStyle = "rgba(255, 255, 255, 0.05)";
         convCtx.lineWidth = 1;
         for (let val = 10; val < 250; val += 30) {
             convCtx.beginPath(); convCtx.moveTo(0, val); convCtx.lineTo(350, val); convCtx.stroke();
         }
-        
+
         // Append new convergence calculation
         if (convFrame < 300 && convFrame % 5 === 0) {
             // Decay curve with numerical noise
@@ -1004,37 +1066,37 @@ async function runCfdSimulation(fileObject) {
             const errorVal = 200 * Math.exp(-stepRatio * 4) + Math.random() * (10 / (convFrame + 1));
             convPoints.push({ x: convPoints.length * 5, y: 220 - errorVal });
         }
-        
+
         // Draw convergence lines
         convCtx.strokeStyle = "#38bdf8";
         convCtx.lineWidth = 2;
         convCtx.beginPath();
-        
+
         convPoints.forEach((p, idx) => {
             if (idx === 0) convCtx.moveTo(p.x, p.y);
             else convCtx.lineTo(p.x, p.y);
         });
         convCtx.stroke();
-        
+
         convFrame += 2;
     }, 20);
 
     await sleep(400);
     writeTerminalLog("[STEP] Simulating 3 complete cardiac cycles (Time step: 0.001s)...", "exec");
-    
+
     // Stream numerical iterations
     for (let iter = 50; iter <= 500; iter += 50) {
-        let continuityErr = (1.5e-3 / (iter/30)).toExponential(1);
-        let uxErr = (5.2e-4 / (iter/35)).toExponential(1);
-        
+        let continuityErr = (1.5e-3 / (iter / 30)).toExponential(1);
+        let uxErr = (5.2e-4 / (iter / 35)).toExponential(1);
+
         if (iter === 100) { continuityErr = "1.2e-4"; uxErr = "4.5e-5"; }
         if (iter === 300) { continuityErr = "5.1e-6"; uxErr = "2.1e-6"; }
         if (iter === 500) { continuityErr = "8.4e-7"; uxErr = "4.2e-7"; }
-        
+
         writeTerminalLog(`[ITER ${iter}] Continuity Error: ${continuityErr} | Ux Error: ${uxErr}`, "exec");
         await sleep(350);
     }
-    
+
     writeTerminalLog("[ITER 500] Convergence criteria met. Residuals dropped below 1e-5.", "success");
     await sleep(400);
     writeTerminalLog("[SUCCESS] Post-processing hemodynamic fields...", "success");
@@ -1049,86 +1111,68 @@ async function runCfdSimulation(fileObject) {
     // --- STEP 6: Hemodynamic Metric Extraction & Report Compilation ---
     document.getElementById("sim-visual-step5").classList.add("hidden");
     document.getElementById("sim-visual-step6").classList.remove("hidden");
-    
+
     const checkTawssEl = document.getElementById("chk-post-tawss");
     const checkOsiEl = document.getElementById("chk-post-osi");
     const checkMorphEl = document.getElementById("chk-post-morph");
     const checkReportEl = document.getElementById("chk-post-report");
-    
+
     // Reset visual checkbox classes
     [checkTawssEl, checkOsiEl, checkMorphEl, checkReportEl].forEach(el => {
         el.className = "checkbox-line";
         el.querySelector(".chk-box").className = "fa-regular fa-square chk-box";
     });
-    
+
     // TAWSS Integrate
     await sleep(600);
     writeTerminalLog("[POST] Integrating Time-Averaged Wall Shear Stress (TAWSS)...", "mesh");
     checkTawssEl.classList.add("done");
     checkTawssEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
-    
+
     // OSI Compute
     await sleep(600);
     writeTerminalLog("[POST] Computing Oscillatory Shear Index (OSI)...", "mesh");
     checkOsiEl.classList.add("done");
     checkOsiEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
-    
+
     // Morphology Calculations
     await sleep(600);
     writeTerminalLog("[POST] Calculating localized aspect ratio and max diameter...", "mesh");
     checkMorphEl.classList.add("done");
     checkMorphEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
-    
+
     // Report compile
     await sleep(600);
     writeTerminalLog("[GEN] Assembling clinical risk report matrix...", "info");
     checkReportEl.classList.add("done");
     checkReportEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
-    
+
     await sleep(600);
     writeTerminalLog("[READY] Redirecting to Clinical Insights Dashboard...", "success");
     await sleep(1000);
-    
+
     // Close modal, success completion
     simulationModalEl.classList.add("hidden");
-    
+
     patientId = window.currentIngestedPatientId || "PT-2025-0061";
     pathology = window.currentIngestedPathology || "Cerebral Vasculature";
 
-    // Dynamically insert or update the patient profile in local state
+    // Dynamically insert or update the patient profile in local state.
+    // Hemodynamic scenario values are seeded from the filename (demo cases),
+    // but the resulting risk tier is always derived via computeCompositeRisk()
+    // rather than being hardcoded, so it can never disagree with the metrics shown.
     if (!patientDatabase[patientId]) {
-        let riskLevel = "High";
-        let compositeRisk = 78;
-        let badgeClass = "badge-high";
-        let riskLabel = "High Rupture Risk";
-        let riskLabelClass = "color-high-risk";
+        let scenario = "High";
+        if (patientId.includes("0039")) scenario = "Low";
+        else if (patientId.includes("0037")) scenario = "Moderate";
 
-        if (patientId.includes("0039")) {
-            riskLevel = "Low";
-            compositeRisk = 22;
-            badgeClass = "badge-low";
-            riskLabel = "Stable / Low Risk";
-            riskLabelClass = "color-low-risk";
-        } else if (patientId.includes("0037")) {
-            riskLevel = "Moderate";
-            compositeRisk = 54;
-            badgeClass = "badge-moderate";
-            riskLabel = "Moderate Risk Profile";
-            riskLabelClass = "color-mod-risk";
-        }
-
-        let tawss = (riskLevel === "High") ? 0.28 : (riskLevel === "Moderate" ? 0.45 : 0.85);
-        let osi = (riskLevel === "High") ? 0.34 : (riskLevel === "Moderate" ? 0.22 : 0.08);
-        let maxDiameter = (riskLevel === "High") ? 6.8 : (riskLevel === "Moderate" ? 5.2 : 3.1);
-        let aspectRatio = (riskLevel === "High") ? 1.8 : (riskLevel === "Moderate" ? 1.4 : 0.9);
+        const tawss = (scenario === "High") ? 0.28 : (scenario === "Moderate" ? 0.45 : 0.85);
+        const osi = (scenario === "High") ? 0.34 : (scenario === "Moderate" ? 0.22 : 0.08);
+        const maxDiameter = (scenario === "High") ? 6.8 : (scenario === "Moderate" ? 5.2 : 3.1);
+        const aspectRatio = (scenario === "High") ? 1.8 : (scenario === "Moderate" ? 1.4 : 0.9);
 
         patientDatabase[patientId] = {
             id: patientId,
-            riskLevel: riskLevel,
-            badgeClass: badgeClass,
-            compositeRisk: compositeRisk,
-            riskLabel: riskLabel,
-            riskLabelClass: riskLabelClass,
             morphology: {
                 maxDiameter: maxDiameter,
                 aspectRatio: aspectRatio
@@ -1145,14 +1189,14 @@ async function runCfdSimulation(fileObject) {
         // Redraw patient switcher list
         renderPatientList();
     }
-    
+
     document.querySelectorAll(".patient-card").forEach(c => {
         c.classList.remove("active");
         if (c.dataset.id === patientId) c.classList.add("active");
     });
-    
+
     loadPatientData(patientDatabase[patientId]);
-    
+
     // Display custom alert notification of successful pipeline execution
     alert(`Computational pipeline completed successfully!\nPatient data for ${patientId} loaded into dashboard.`);
 }

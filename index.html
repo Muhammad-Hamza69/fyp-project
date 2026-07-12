@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,11 +8,23 @@
     <!-- Google Fonts: Ubuntu Font Family -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap"
+        rel="stylesheet">
     <!-- FontAwesome for clinical icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
+    <!-- Three.js import map for the 3D nerve/vascular model viewer -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
+
 <body>
     <!-- Drag & Drop Upload Zone Wrapper -->
     <div id="drop-zone-container" class="drop-zone-wrapper">
@@ -61,7 +74,15 @@
             <main class="workspace-panel">
                 <div class="panel-header-row">
                     <div class="section-title-wrap">
-                        <h2 class="accent-title">2D Hemodynamic Heatmap</h2>
+                        <h2 class="accent-title" id="workspace-title">2D Hemodynamic Heatmap</h2>
+                    </div>
+                    <div class="toggle-control-group view-switch-group">
+                        <button id="view-2d-btn" class="toggle-btn active" data-view="2d">
+                            <i class="fa-solid fa-chart-area"></i> 2D Heatmap
+                        </button>
+                        <button id="view-3d-btn" class="toggle-btn" data-view="3d">
+                            <i class="fa-solid fa-cube"></i> 3D Nerve Model
+                        </button>
                     </div>
                     <div class="toggle-control-group">
                         <button id="toggle-tawss-btn" class="toggle-btn active" data-map="TAWSS">
@@ -72,36 +93,61 @@
                         </button>
                     </div>
                 </div>
-                
+
                 <div class="canvas-container">
-                    <!-- HTML5 Heatmap Canvas -->
-                    <canvas id="heatmap-canvas" width="650" height="420"></canvas>
-                    
-                    <!-- Dynamic Tooltip -->
-                    <div id="canvas-tooltip" class="canvas-tooltip hidden">
-                        <div class="tooltip-header">
-                            <span class="tooltip-title">Node #<span id="tooltip-node-id">-</span></span>
-                            <span id="tooltip-risk-tag" class="tooltip-risk-badge">Stable</span>
-                        </div>
-                        <div class="tooltip-body">
-                            <div class="tooltip-row">
-                                <span class="tooltip-label">TAWSS:</span>
-                                <span class="tooltip-val" id="tooltip-tawss-val">-</span>
+                    <!-- 2D Heatmap View -->
+                    <div id="view-2d-pane" class="view-pane">
+                        <!-- HTML5 Heatmap Canvas -->
+                        <canvas id="heatmap-canvas" width="650" height="420"></canvas>
+
+                        <!-- Dynamic Tooltip -->
+                        <div id="canvas-tooltip" class="canvas-tooltip hidden">
+                            <div class="tooltip-header">
+                                <span class="tooltip-title">Node #<span id="tooltip-node-id">-</span></span>
+                                <span id="tooltip-risk-tag" class="tooltip-risk-badge">Stable</span>
                             </div>
-                            <div class="tooltip-row">
-                                <span class="tooltip-label">OSI:</span>
-                                <span class="tooltip-val" id="tooltip-osi-val">-</span>
+                            <div class="tooltip-body">
+                                <div class="tooltip-row">
+                                    <span class="tooltip-label">TAWSS:</span>
+                                    <span class="tooltip-val" id="tooltip-tawss-val">-</span>
+                                </div>
+                                <div class="tooltip-row">
+                                    <span class="tooltip-label">OSI:</span>
+                                    <span class="tooltip-val" id="tooltip-osi-val">-</span>
+                                </div>
+                            </div>
+                            <div id="tooltip-alarm-msg" class="tooltip-alarm hidden">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                [Rupture Vulnerability Zone Detected]
                             </div>
                         </div>
-                        <div id="tooltip-alarm-msg" class="tooltip-alarm hidden">
-                            <i class="fa-solid fa-triangle-exclamation"></i>
-                            [Rupture Vulnerability Zone Detected]
+
+                        <!-- Canvas Interactive Hints -->
+                        <div class="canvas-overlay-hints">
+                            <span><i class="fa-solid fa-circle-info"></i> Hover over vascular sectors for dynamic
+                                spatial telemetry</span>
                         </div>
                     </div>
 
-                    <!-- Canvas Interactive Hints -->
-                    <div class="canvas-overlay-hints">
-                        <span><i class="fa-solid fa-circle-info"></i> Hover over vascular sectors for dynamic spatial telemetry</span>
+                    <!-- 3D Nerve/Vascular Model View -->
+                    <div id="view-3d-pane" class="view-pane hidden">
+                        <div id="neuro-3d-mount" class="neuro-3d-mount"></div>
+
+                        <div id="neuro-3d-loading" class="neuro-3d-loading">
+                            <i class="fa-solid fa-circle-notch fa-spin"></i> Loading 3D nerve/vascular model...
+                        </div>
+
+                        <div class="canvas-overlay-hints">
+                            <span><i class="fa-solid fa-arrows-rotate"></i> Drag to rotate &middot; scroll to zoom
+                                &mdash; color reflects the aneurysm's live TAWSS/OSI risk</span>
+                        </div>
+
+                        <div class="neuro-3d-legend">
+                            <span>Stable</span>
+                            <span class="legend-dot legend-dot-blue"></span>
+                            <span class="legend-dot legend-dot-red"></span>
+                            <span>Critical</span>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -111,16 +157,18 @@
                 <div class="sidebar-title">
                     <h2>Hemodynamic Telemetry</h2>
                 </div>
-                
+
                 <!-- Central Composite Risk Index Gauge -->
                 <div class="card metric-card composite-card">
                     <h3 class="card-title">Composite Risk Index</h3>
                     <div class="composite-gauge-container">
                         <svg class="radial-ring-svg" viewBox="0 0 120 60">
                             <!-- Background track -->
-                            <circle class="ring-bg" cx="60" cy="60" r="50" stroke-dasharray="157.08 157.08" transform="rotate(-180 60 60)"></circle>
+                            <circle class="ring-bg" cx="60" cy="60" r="50" stroke-dasharray="157.08 157.08"
+                                transform="rotate(-180 60 60)"></circle>
                             <!-- Color track filled via JS -->
-                            <circle id="composite-ring-fill" class="ring-fill" cx="60" cy="60" r="50" stroke-dasharray="157.08 157.08" transform="rotate(-180 60 60)"></circle>
+                            <circle id="composite-ring-fill" class="ring-fill" cx="60" cy="60" r="50"
+                                stroke-dasharray="157.08 157.08" transform="rotate(-180 60 60)"></circle>
                         </svg>
                         <div class="composite-needle-pivot"></div>
                         <div id="composite-needle" class="composite-needle"></div>
@@ -142,7 +190,8 @@
                         <div class="radial-progress-container">
                             <svg class="radial-progress-svg" viewBox="0 0 80 80">
                                 <circle class="ring-bg" cx="40" cy="40" r="32"></circle>
-                                <circle id="tawss-progress-fill" class="ring-fill" cx="40" cy="40" r="32" transform="rotate(-90 40 40)"></circle>
+                                <circle id="tawss-progress-fill" class="ring-fill" cx="40" cy="40" r="32"
+                                    transform="rotate(-90 40 40)"></circle>
                             </svg>
                             <div class="radial-progress-text">
                                 <span id="tawss-gauge-val" class="gauge-val">0.00</span>
@@ -150,49 +199,49 @@
                             </div>
                         </div>
                         <div class="alert-indicator hidden" id="tawss-alert">
-                            <i class="fa-solid fa-triangle-exclamation"></i> Low TAWSS (< 0.4 Pa)
+                            <i class="fa-solid fa-triangle-exclamation"></i> Low TAWSS (< 0.4 Pa) </div>
+                        </div>
+
+                        <!-- OSI Gauge Card -->
+                        <div class="card metric-card hover-card">
+                            <h3 class="card-title">Aneurysm OSI</h3>
+                            <div class="radial-progress-container">
+                                <svg class="radial-progress-svg" viewBox="0 0 80 80">
+                                    <circle class="ring-bg" cx="40" cy="40" r="32"></circle>
+                                    <circle id="osi-progress-fill" class="ring-fill" cx="40" cy="40" r="32"
+                                        transform="rotate(-90 40 40)"></circle>
+                                </svg>
+                                <div class="radial-progress-text">
+                                    <span id="osi-gauge-val" class="gauge-val">0.00</span>
+                                    <span class="gauge-unit">Index</span>
+                                </div>
+                            </div>
+                            <div class="alert-indicator hidden" id="osi-alert">
+                                <i class="fa-solid fa-triangle-exclamation"></i> High OSI (> 0.3)
+                            </div>
                         </div>
                     </div>
 
-                    <!-- OSI Gauge Card -->
-                    <div class="card metric-card hover-card">
-                        <h3 class="card-title">Aneurysm OSI</h3>
-                        <div class="radial-progress-container">
-                            <svg class="radial-progress-svg" viewBox="0 0 80 80">
-                                <circle class="ring-bg" cx="40" cy="40" r="32"></circle>
-                                <circle id="osi-progress-fill" class="ring-fill" cx="40" cy="40" r="32" transform="rotate(-90 40 40)"></circle>
-                            </svg>
-                            <div class="radial-progress-text">
-                                <span id="osi-gauge-val" class="gauge-val">0.00</span>
-                                <span class="gauge-unit">Index</span>
+                    <!-- Morphology Data Grid -->
+                    <div class="card metric-card morphology-card">
+                        <h3 class="card-title">Aneurysm Morphology</h3>
+                        <div class="morphology-grid">
+                            <div class="morphology-item">
+                                <span class="morph-label">Max Diameter</span>
+                                <div class="morph-value-container">
+                                    <span id="morph-max-diameter" class="morph-val">-</span>
+                                    <span class="morph-unit">mm</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="alert-indicator hidden" id="osi-alert">
-                            <i class="fa-solid fa-triangle-exclamation"></i> High OSI (> 0.3)
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Morphology Data Grid -->
-                <div class="card metric-card morphology-card">
-                    <h3 class="card-title">Aneurysm Morphology</h3>
-                    <div class="morphology-grid">
-                        <div class="morphology-item">
-                            <span class="morph-label">Max Diameter</span>
-                            <div class="morph-value-container">
-                                <span id="morph-max-diameter" class="morph-val">-</span>
-                                <span class="morph-unit">mm</span>
-                            </div>
-                        </div>
-                        <div class="morphology-item">
-                            <span class="morph-label">Aspect Ratio</span>
-                            <div class="morph-value-container">
-                                <span id="morph-aspect-ratio" class="morph-val">-</span>
-                                <span class="morph-unit">Ratio</span>
+                            <div class="morphology-item">
+                                <span class="morph-label">Aspect Ratio</span>
+                                <div class="morph-value-container">
+                                    <span id="morph-aspect-ratio" class="morph-val">-</span>
+                                    <span class="morph-unit">Ratio</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
             </section>
         </div>
 
@@ -208,7 +257,7 @@
                 </header>
                 <div class="modal-body printable-report-body" id="printable-report-area">
                     <div class="report-watermark">CONFIDENTIAL MEDICAL DATA</div>
-                    
+
                     <!-- Report Header / Metadata Grid -->
                     <div class="report-section report-meta-grid">
                         <div class="report-meta-item">
@@ -225,7 +274,8 @@
                         </div>
                         <div class="report-meta-item">
                             <span class="meta-label">Clinical Risk Classification</span>
-                            <span class="meta-value"><span id="report-risk-badge" class="status-badge">HIGH RISK</span></span>
+                            <span class="meta-value"><span id="report-risk-badge" class="status-badge">HIGH
+                                    RISK</span></span>
                         </div>
                     </div>
 
@@ -344,7 +394,8 @@
                     <!-- Left: Visual Simulation Animation Viewer -->
                     <div class="sim-visualizer-card">
                         <div class="visualizer-header">
-                            <span class="visualizer-tag"><i class="fa-solid fa-video"></i> Real-time Visualization Telemetry</span>
+                            <span class="visualizer-tag"><i class="fa-solid fa-video"></i> Real-time Visualization
+                                Telemetry</span>
                             <span id="active-step-badge" class="active-step-badge">Step 1</span>
                         </div>
                         <div class="visualizer-display-pane" id="visualizer-pane">
@@ -353,9 +404,11 @@
                                 <div class="upload-progress-card">
                                     <i class="fa-solid fa-cloud-arrow-up large-upload-icon pulse"></i>
                                     <div class="upload-text">Uploading DICOM Series...</div>
-                                    <div class="speed-indicator"><i class="fa-solid fa-bolt"></i> Speed: <span id="flicker-upload-speed">45.2 MB/s</span></div>
+                                    <div class="speed-indicator"><i class="fa-solid fa-bolt"></i> Speed: <span
+                                            id="flicker-upload-speed">45.2 MB/s</span></div>
                                     <div class="progress-bar-outer">
-                                        <div id="upload-progress-inner" class="progress-bar-inner" style="width: 0%;"></div>
+                                        <div id="upload-progress-inner" class="progress-bar-inner" style="width: 0%;">
+                                        </div>
                                     </div>
                                     <div class="progress-percent-label" id="upload-percent-label">0%</div>
                                 </div>
@@ -408,7 +461,8 @@
                                     <div class="extraction-checkboxes">
                                         <div class="checkbox-line" id="chk-post-tawss">
                                             <i class="fa-regular fa-square chk-box"></i>
-                                            <span class="chk-text">Integrating Time-Averaged Wall Shear Stress (TAWSS)</span>
+                                            <span class="chk-text">Integrating Time-Averaged Wall Shear Stress
+                                                (TAWSS)</span>
                                         </div>
                                         <div class="checkbox-line" id="chk-post-osi">
                                             <i class="fa-regular fa-square chk-box"></i>
@@ -487,7 +541,10 @@
         </div>
     </div>
 
+    <!-- 3D nerve/vascular model viewer (Three.js) -->
+    <script type="module" src="neuro3d.js"></script>
     <!-- Application script -->
     <script src="app.js"></script>
 </body>
+
 </html>
