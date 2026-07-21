@@ -180,6 +180,38 @@
                     <div class="composite-risk-label-wrap">
                         <span id="composite-risk-label" class="risk-label-text">Calculating...</span>
                     </div>
+
+                    <!-- Explainability: contribution of each factor to the score above -->
+                    <div class="risk-breakdown" id="risk-breakdown">
+                        <div class="risk-breakdown-row">
+                            <span class="risk-breakdown-label">TAWSS <em>(35%)</em></span>
+                            <div class="risk-breakdown-bar-track">
+                                <div class="risk-breakdown-bar-fill" id="breakdown-tawss-fill"></div>
+                            </div>
+                            <span class="risk-breakdown-pct" id="breakdown-tawss-pct">0%</span>
+                        </div>
+                        <div class="risk-breakdown-row">
+                            <span class="risk-breakdown-label">OSI <em>(30%)</em></span>
+                            <div class="risk-breakdown-bar-track">
+                                <div class="risk-breakdown-bar-fill" id="breakdown-osi-fill"></div>
+                            </div>
+                            <span class="risk-breakdown-pct" id="breakdown-osi-pct">0%</span>
+                        </div>
+                        <div class="risk-breakdown-row">
+                            <span class="risk-breakdown-label">Diameter <em>(20%)</em></span>
+                            <div class="risk-breakdown-bar-track">
+                                <div class="risk-breakdown-bar-fill" id="breakdown-diameter-fill"></div>
+                            </div>
+                            <span class="risk-breakdown-pct" id="breakdown-diameter-pct">0%</span>
+                        </div>
+                        <div class="risk-breakdown-row">
+                            <span class="risk-breakdown-label">Aspect Ratio <em>(15%)</em></span>
+                            <div class="risk-breakdown-bar-track">
+                                <div class="risk-breakdown-bar-fill" id="breakdown-aspect-fill"></div>
+                            </div>
+                            <span class="risk-breakdown-pct" id="breakdown-aspect-pct">0%</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- TAWSS & OSI Radial Charts -->
@@ -242,6 +274,63 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Advanced Hemodynamic Markers: RRT & ECAP -->
+                    <div class="metrics-row-two-col">
+                        <div class="card metric-card hover-card">
+                            <h3 class="card-title">Aneurysm RRT</h3>
+                            <div class="radial-progress-container">
+                                <svg class="radial-progress-svg" viewBox="0 0 80 80">
+                                    <circle class="ring-bg" cx="40" cy="40" r="32"></circle>
+                                    <circle id="rrt-progress-fill" class="ring-fill" cx="40" cy="40" r="32"
+                                        transform="rotate(-90 40 40)"></circle>
+                                </svg>
+                                <div class="radial-progress-text">
+                                    <span id="rrt-gauge-val" class="gauge-val">0.00</span>
+                                    <span class="gauge-unit">Pa&#8315;&#185;</span>
+                                </div>
+                            </div>
+                            <div class="alert-indicator hidden" id="rrt-alert">
+                                <i class="fa-solid fa-triangle-exclamation"></i> Elevated RRT (&gt; 3.0)
+                            </div>
+                        </div>
+
+                        <div class="card metric-card hover-card">
+                            <h3 class="card-title">Aneurysm ECAP</h3>
+                            <div class="radial-progress-container">
+                                <svg class="radial-progress-svg" viewBox="0 0 80 80">
+                                    <circle class="ring-bg" cx="40" cy="40" r="32"></circle>
+                                    <circle id="ecap-progress-fill" class="ring-fill" cx="40" cy="40" r="32"
+                                        transform="rotate(-90 40 40)"></circle>
+                                </svg>
+                                <div class="radial-progress-text">
+                                    <span id="ecap-gauge-val" class="gauge-val">0.00</span>
+                                    <span class="gauge-unit">Index</span>
+                                </div>
+                            </div>
+                            <div class="alert-indicator hidden" id="ecap-alert">
+                                <i class="fa-solid fa-triangle-exclamation"></i> High ECAP (&gt; 1.0)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PHASES Clinical Risk Score: demographic/morphological score, independent of the CFD sim -->
+                    <div class="card metric-card phases-card">
+                        <h3 class="card-title">Clinical Risk Score (PHASES)</h3>
+                        <div class="phases-score-row">
+                            <div class="phases-score-value-wrap">
+                                <span id="phases-total-points" class="phases-points">0</span>
+                                <span class="phases-points-label">Points</span>
+                            </div>
+                            <div class="phases-risk-percent-wrap">
+                                <span id="phases-risk-percent" class="phases-percent">0.0%</span>
+                                <span class="phases-percent-label">5-yr Rupture Risk</span>
+                            </div>
+                        </div>
+                        <div class="phases-breakdown" id="phases-breakdown"></div>
+                        <p class="phases-card-note">Demographic &amp; morphological score (Greving et al., PHASES) &mdash;
+                            used alongside, not instead of, the hemodynamic Composite Risk Index above.</p>
+                    </div>
             </section>
         </div>
 
@@ -270,7 +359,7 @@
                         </div>
                         <div class="report-meta-item">
                             <span class="meta-label">Anatomical Target</span>
-                            <span class="meta-value">Internal Carotid Aneurysm</span>
+                            <span class="meta-value" id="report-anatomical-target">-</span>
                         </div>
                         <div class="report-meta-item">
                             <span class="meta-label">Clinical Risk Classification</span>
@@ -335,6 +424,18 @@
                                         <td>&lt; 1.50</td>
                                         <td id="report-aspect-status">-</td>
                                     </tr>
+                                    <tr>
+                                        <td class="bold">Relative Residence Time (RRT)</td>
+                                        <td id="report-rrt-val">-</td>
+                                        <td>&lt; 3.00 Pa&#8315;&#185;</td>
+                                        <td id="report-rrt-status">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="bold">Endothelial Cell Activation Potential (ECAP)</td>
+                                        <td id="report-ecap-val">-</td>
+                                        <td>&lt; 1.00</td>
+                                        <td id="report-ecap-status">-</td>
+                                    </tr>
                                     <tr class="highlight-row">
                                         <td class="bold">Composite Risk Score</td>
                                         <td id="report-composite-score" class="bold">-</td>
@@ -352,6 +453,33 @@
                         <p class="clinical-text" id="report-clinical-text">
                             -
                         </p>
+                    </div>
+
+                    <!-- PHASES Demographic/Morphological Risk Score -->
+                    <div class="report-section">
+                        <h3 class="report-subsection-title">Clinical Risk Scoring (PHASES)</h3>
+                        <table class="report-metrics-table">
+                            <thead>
+                                <tr>
+                                    <th>Risk Factor</th>
+                                    <th>Patient Value</th>
+                                    <th>Points</th>
+                                </tr>
+                            </thead>
+                            <tbody id="report-phases-breakdown-body"></tbody>
+                            <tbody>
+                                <tr class="highlight-row">
+                                    <td class="bold">Total PHASES Score &rarr; 5-Year Rupture Risk</td>
+                                    <td id="report-phases-points" class="bold">-</td>
+                                    <td id="report-phases-percent" class="bold">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p class="clinical-text phases-report-note">PHASES is a demographic and morphological score
+                            (Population, Hypertension, Age, Size, Earlier SAH, Site) independent of the CFD
+                            simulation above. It is reported alongside the Composite Risk Index as a multimodal
+                            check, consistent with current clinical guidance to combine hemodynamic and
+                            demographic risk assessment.</p>
                     </div>
 
                     <!-- Report Sign-off -->

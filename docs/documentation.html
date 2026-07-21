@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NeuroFlow CFD Analyst — Project Documentation</title>
+<style>
+    @page {
+        size: A4;
+        margin: 22mm 18mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        font-family: 'Georgia', 'Times New Roman', serif;
+        font-size: 11.5pt;
+        line-height: 1.55;
+        color: #1a1a1a;
+        margin: 0;
+    }
+
+    h1, h2, h3, h4 {
+        font-family: 'Arial', 'Helvetica', sans-serif;
+        color: #0f172a;
+        page-break-after: avoid;
+    }
+
+    /* ---------------- Cover Page ---------------- */
+    .cover-page {
+        height: 253mm;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        page-break-after: always;
+    }
+
+    .cover-university {
+        font-family: 'Arial', sans-serif;
+        font-size: 16pt;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: #0f172a;
+        text-transform: uppercase;
+    }
+
+    .cover-department {
+        font-family: 'Arial', sans-serif;
+        font-size: 12pt;
+        color: #475569;
+        margin-top: 4px;
+        margin-bottom: 40px;
+    }
+
+    .cover-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .cover-brand-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #1F5F99, #38bdf8);
+    }
+
+    .cover-project-title {
+        font-family: 'Arial', sans-serif;
+        font-size: 27pt;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 18px 0 6px 0;
+        max-width: 520px;
+    }
+
+    .cover-project-subtitle {
+        font-family: 'Arial', sans-serif;
+        font-size: 13pt;
+        color: #334155;
+        max-width: 480px;
+        margin-bottom: 10px;
+    }
+
+    .cover-doctype {
+        font-family: 'Arial', sans-serif;
+        font-size: 11pt;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #64748b;
+        margin: 30px 0 50px 0;
+        border-top: 1px solid #cbd5e1;
+        border-bottom: 1px solid #cbd5e1;
+        padding: 10px 26px;
+    }
+
+    .cover-meta-block {
+        font-family: 'Arial', sans-serif;
+        font-size: 11pt;
+        color: #1e293b;
+        text-align: left;
+        width: 340px;
+    }
+
+    .cover-meta-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 7px 0;
+        border-bottom: 1px dotted #cbd5e1;
+    }
+
+    .cover-meta-label {
+        color: #64748b;
+        font-weight: 700;
+    }
+
+    .cover-meta-value {
+        text-align: right;
+        max-width: 210px;
+    }
+
+    /* ---------------- TOC ---------------- */
+    .toc-page {
+        page-break-after: always;
+    }
+
+    .toc-title {
+        font-size: 20pt;
+        border-bottom: 2px solid #0f172a;
+        padding-bottom: 8px;
+        margin-bottom: 20px;
+    }
+
+    .toc-entry {
+        display: flex;
+        justify-content: space-between;
+        font-family: 'Arial', sans-serif;
+        font-size: 11pt;
+        padding: 6px 0;
+        border-bottom: 1px dotted #cbd5e1;
+    }
+
+    .toc-entry.sub {
+        padding-left: 20px;
+        color: #475569;
+        font-size: 10.5pt;
+    }
+
+    /* ---------------- Body Sections ---------------- */
+    .section {
+        page-break-before: always;
+    }
+
+    h1.section-title {
+        font-size: 19pt;
+        border-bottom: 2px solid #1F5F99;
+        padding-bottom: 6px;
+        margin-top: 0;
+    }
+
+    h2.subsection-title {
+        font-size: 13.5pt;
+        margin-top: 26px;
+        margin-bottom: 8px;
+        color: #1F5F99;
+    }
+
+    h3.subsub-title {
+        font-size: 11.5pt;
+        margin-top: 16px;
+        margin-bottom: 6px;
+        color: #334155;
+    }
+
+    p { margin: 8px 0; text-align: justify; }
+
+    ul, ol { margin: 8px 0; padding-left: 22px; }
+    li { margin: 4px 0; }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0;
+        font-size: 10pt;
+        font-family: 'Arial', sans-serif;
+    }
+
+    th, td {
+        border: 1px solid #cbd5e1;
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    th {
+        background-color: #0f172a;
+        color: #ffffff;
+        font-weight: 700;
+    }
+
+    tr:nth-child(even) td {
+        background-color: #f8fafc;
+    }
+
+    code, .code-inline {
+        font-family: 'Consolas', 'Courier New', monospace;
+        background-color: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-size: 9.5pt;
+    }
+
+    .formula-block {
+        font-family: 'Consolas', 'Courier New', monospace;
+        background-color: #0f172a;
+        color: #a7f3d0;
+        padding: 10px 14px;
+        border-radius: 6px;
+        margin: 10px 0;
+        font-size: 10pt;
+        white-space: pre-wrap;
+    }
+
+    .callout {
+        background-color: #eff6ff;
+        border-left: 4px solid #1F5F99;
+        padding: 10px 14px;
+        margin: 12px 0;
+        font-size: 10.5pt;
+    }
+
+    .callout.honesty {
+        background-color: #fff7ed;
+        border-left-color: #c47d1a;
+    }
+
+    .figure {
+        margin: 16px 0;
+        text-align: center;
+        page-break-inside: avoid;
+    }
+
+    .figure img {
+        max-width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+    }
+
+    .figure-caption {
+        font-family: 'Arial', sans-serif;
+        font-size: 9.5pt;
+        color: #475569;
+        margin-top: 6px;
+        font-style: italic;
+    }
+
+    .two-col-figures {
+        display: flex;
+        gap: 12px;
+    }
+
+    .two-col-figures .figure {
+        flex: 1;
+    }
+
+    .abstract-box {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 16px 20px;
+        font-size: 11pt;
+    }
+
+    .refs-list {
+        font-size: 10.5pt;
+        padding-left: 20px;
+    }
+
+    .refs-list li { margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER PAGE ============ -->
+<div class="cover-page">
+    <div class="cover-university">University of Karachi</div>
+    <div class="cover-department">Department: UBIT</div>
+
+    <div class="cover-brand">
+        <div class="cover-brand-icon"></div>
+    </div>
+    <div class="cover-project-title">NeuroFlow CFD Analyst</div>
+    <div class="cover-project-subtitle">A Computational Fluid Dynamics-Based Hemodynamic Analysis Dashboard for Cerebral Aneurysm Rupture-Risk Assessment</div>
+
+    <div class="cover-doctype">Final Year Project Documentation</div>
+
+    <div class="cover-meta-block">
+        <div class="cover-meta-row"><span class="cover-meta-label">Group Members</span>
+            <span class="cover-meta-value">Muhammad Hamza<br>Muhammad Huzaifa Attari<br>Zeerak Khan<br>Muhammad Annas</span></div>
+        <div class="cover-meta-row"><span class="cover-meta-label">Supervisors</span>
+            <span class="cover-meta-value">Nadeem Mehmood<br>Mukesh Kumar</span></div>
+        <div class="cover-meta-row"><span class="cover-meta-label">Submission Date</span>
+            <span class="cover-meta-value">July 13, 2026</span></div>
+    </div>
+</div>
+
+<!-- ============ TABLE OF CONTENTS ============ -->
+<div class="toc-page">
+    <h1 class="toc-title">Table of Contents</h1>
+    <div class="toc-entry"><span>1. Abstract</span><span>3</span></div>
+    <div class="toc-entry"><span>2. Introduction</span><span>4</span></div>
+    <div class="toc-entry sub"><span>2.1 Background &amp; Motivation</span><span></span></div>
+    <div class="toc-entry sub"><span>2.2 Problem Statement</span><span></span></div>
+    <div class="toc-entry"><span>3. Objectives</span><span>5</span></div>
+    <div class="toc-entry"><span>4. Literature Review</span><span>5</span></div>
+    <div class="toc-entry sub"><span>4.1 CFD in Cerebral Aneurysm Research</span><span></span></div>
+    <div class="toc-entry sub"><span>4.2 Hemodynamic Wall Parameters (TAWSS, OSI, RRT, ECAP)</span><span></span></div>
+    <div class="toc-entry sub"><span>4.3 Clinical Risk Scoring (PHASES)</span><span></span></div>
+    <div class="toc-entry sub"><span>4.4 Related Open-Source Tools</span><span></span></div>
+    <div class="toc-entry"><span>5. System Design &amp; Architecture</span><span>7</span></div>
+    <div class="toc-entry"><span>6. Implementation</span><span>8</span></div>
+    <div class="toc-entry"><span>7. Results &amp; Screenshots</span><span>11</span></div>
+    <div class="toc-entry"><span>8. Testing &amp; Validation</span><span>14</span></div>
+    <div class="toc-entry"><span>9. Limitations</span><span>15</span></div>
+    <div class="toc-entry"><span>10. Future Work</span><span>15</span></div>
+    <div class="toc-entry"><span>11. Conclusion</span><span>16</span></div>
+    <div class="toc-entry"><span>12. References</span><span>16</span></div>
+</div>
+
+<!-- ============ 1. ABSTRACT ============ -->
+<div class="section">
+    <h1 class="section-title">1. Abstract</h1>
+    <div class="abstract-box">
+        <p>Cerebral aneurysms are localized dilations of intracranial blood vessels whose rupture causes
+        subarachnoid hemorrhage, a condition with high mortality and morbidity. Clinical decision-making around
+        whether an unruptured aneurysm requires intervention or monitoring increasingly draws on
+        <strong>Computational Fluid Dynamics (CFD)</strong>-derived hemodynamic biomarkers &mdash; principally
+        Time-Averaged Wall Shear Stress (TAWSS) and the Oscillatory Shear Index (OSI) &mdash; alongside
+        demographic and morphological risk scores such as PHASES.</p>
+        <p><strong>NeuroFlow CFD Analyst</strong> is a web-based clinical decision-support dashboard that
+        visualizes these hemodynamic and morphological indicators for patient-specific cerebral aneurysm cases.
+        The system presents a 2D color-mapped hemodynamic heatmap, an interactive 3D vessel/nerve visualization,
+        a live-computed Composite Risk Index with factor-level explainability, supplementary markers (Relative
+        Residence Time and Endothelial Cell Activation Potential), a PHASES clinical risk score, and an
+        exportable clinical report. A DICOM metadata ingestion pipeline (Python, <code>pydicom</code>) forms the
+        first real backend component toward a full CFD pipeline. This document describes the project's
+        motivation, design, implementation, and evaluation, and outlines the path toward a fully computed
+        (rather than visualized) hemodynamic simulation backend.</p>
+    </div>
+</div>
+
+<!-- ============ 2. INTRODUCTION ============ -->
+<div class="section">
+    <h1 class="section-title">2. Introduction</h1>
+
+    <h2 class="subsection-title">2.1 Background &amp; Motivation</h2>
+    <p>An intracranial (cerebral) aneurysm is an abnormal bulge in the wall of a brain artery, most commonly
+    forming at arterial bifurcations where hemodynamic stress is highest. Most aneurysms are discovered
+    incidentally during imaging performed for unrelated reasons and never rupture; however, when rupture does
+    occur, it produces a subarachnoid hemorrhage with mortality reported in the range of 30&ndash;50%. The
+    central clinical question &mdash; and the one this project is built around &mdash; is therefore not "does
+    this patient have an aneurysm?" but <em>"how likely is this specific aneurysm to rupture, and does that risk
+    justify the risk of surgical or endovascular intervention?"</em></p>
+    <p>Traditional risk stratification relied primarily on aneurysm size and patient demographics. Over the past
+    decade, CFD-derived hemodynamic parameters &mdash; computed by simulating blood flow through a
+    patient-specific 3D reconstruction of the vessel, typically segmented from MRA (Magnetic Resonance
+    Angiography) or CTA (Computed Tomography Angiography) imaging &mdash; have been shown to correlate with
+    rupture status, motivating the development of hemodynamics-aware clinical decision-support tools.</p>
+
+    <h2 class="subsection-title">2.2 Problem Statement</h2>
+    <p>Raw CFD output (millions of mesh nodes, each carrying multiple time-varying scalar fields) is not directly
+    usable by a clinician at the point of care. There is a need for a dashboard layer that:</p>
+    <ul>
+        <li>Translates CFD-derived hemodynamic fields into an intuitive, color-coded spatial visualization;</li>
+        <li>Surfaces the specific numeric thresholds that clinical literature associates with elevated rupture
+        risk;</li>
+        <li>Combines hemodynamic (flow-based) and morphological/demographic (PHASES-style) risk assessment into
+        a single, explainable composite score, consistent with current multimodal clinical guidance; and</li>
+        <li>Produces a clinician-facing report suitable for case review and documentation.</li>
+    </ul>
+    <p>NeuroFlow CFD Analyst was built to address this dashboard layer, using a realistic patient dataset and a
+    clinically-grounded set of derived metrics, with an explicit, documented boundary around which parts of the
+    system are computed live from data versus which represent a scripted visualization of a solver pipeline that
+    a production deployment would replace with a real backend (see Section 9).</p>
+</div>
+
+<!-- ============ 3. OBJECTIVES ============ -->
+<div class="section">
+    <h1 class="section-title">3. Objectives</h1>
+    <ol>
+        <li>Design and implement a patient-centric dashboard for reviewing CFD-derived hemodynamic data across
+        multiple cerebral aneurysm cases.</li>
+        <li>Implement a 2D spatial heatmap visualization mapping Wall Shear Stress-related metrics onto a
+        vessel/aneurysm geometry, toggle-able between TAWSS and OSI display modes.</li>
+        <li>Implement a 3D visualization of the cerebral vessel/nerve network, with risk-driven, localized color
+        mapping rather than a uniform whole-model tint.</li>
+        <li>Derive a live, explainable Composite Risk Index (CRI) from hemodynamic and morphological inputs,
+        rather than using static, pre-assigned risk labels.</li>
+        <li>Extend hemodynamic assessment beyond TAWSS/OSI with supplementary markers used in current CFD
+        rupture-risk literature: Relative Residence Time (RRT) and Endothelial Cell Activation Potential (ECAP).</li>
+        <li>Implement a validated, published demographic/morphological risk score (PHASES) as an independent,
+        complementary risk signal alongside the hemodynamic CRI.</li>
+        <li>Build a DICOM metadata ingestion component using real medical-imaging parsing (<code>pydicom</code>)
+        as the first backend step toward a full CFD pipeline.</li>
+        <li>Generate a structured, exportable clinical report summarizing all computed metrics against their
+        clinical thresholds.</li>
+    </ol>
+</div>
+
+<!-- ============ 4. LITERATURE REVIEW ============ -->
+<div class="section">
+    <h1 class="section-title">4. Literature Review</h1>
+
+    <h2 class="subsection-title">4.1 CFD in Cerebral Aneurysm Research</h2>
+    <p>Patient-specific hemodynamic CFD analysis of cerebral aneurysms follows a well-established pipeline:
+    (1) medical image acquisition (MRA/CTA), (2) vessel segmentation to produce a 3D surface model, (3) surface
+    and volumetric mesh generation, (4) assignment of patient-specific or population-averaged boundary
+    conditions (inlet velocity waveform, outlet pressure, blood density/viscosity), (5) numerical solution of
+    the unsteady Navier&ndash;Stokes equations over several cardiac cycles, and (6) post-processing to extract
+    wall-based hemodynamic fields. <strong>SimVascular</strong> is the most widely cited fully open-source
+    implementation of this entire pipeline, and is frequently paired with the <strong>Vascular Modeling Toolkit
+    (VMTK)</strong> for vessel-lumen extraction and centreline-based geometric analysis; solvers such as
+    <strong>OpenFOAM</strong> are also used for the Navier&ndash;Stokes solve stage. NeuroFlow CFD Analyst's
+    simulated six-stage pipeline (Section 6.7) mirrors this exact stage sequence for demonstration purposes.</p>
+
+    <h2 class="subsection-title">4.2 Hemodynamic Wall Parameters</h2>
+    <p>Four wall-based scalar fields are used in this project, all derived from the same underlying quantity
+    &mdash; the instantaneous Wall Shear Stress (WSS) vector field on the vessel surface, integrated or
+    statistically summarized over one cardiac cycle:</p>
+    <table>
+        <thead><tr><th>Parameter</th><th>Definition</th><th>Rupture Association</th></tr></thead>
+        <tbody>
+            <tr><td><strong>TAWSS</strong><br>Time-Averaged Wall Shear Stress</td>
+                <td>Magnitude of the WSS vector averaged over one full cardiac cycle.</td>
+                <td>Low TAWSS is associated with flow stagnation and endothelial dysfunction at the aneurysm
+                wall.</td></tr>
+            <tr><td><strong>OSI</strong><br>Oscillatory Shear Index</td>
+                <td>Measures the degree to which the WSS vector direction reverses during the cycle; ranges
+                0&ndash;0.5.</td>
+                <td>High OSI indicates disturbed, non-unidirectional flow linked to wall degeneration.</td></tr>
+            <tr><td><strong>RRT</strong><br>Relative Residence Time</td>
+                <td>Combines TAWSS and OSI: <code>RRT &prop; 1 / ((1&minus;2&middot;OSI)&middot;TAWSS)</code></td>
+                <td>Approximates how long blood constituents reside near the wall; elevated RRT is associated
+                with atherogenic, pro-thrombotic conditions.</td></tr>
+            <tr><td><strong>ECAP</strong><br>Endothelial Cell Activation Potential</td>
+                <td><code>ECAP = OSI / TAWSS</code></td>
+                <td>Values above &asymp;1 indicate the oscillatory component dominates over mean shear, a pattern
+                associated with elevated rupture risk in CFD-based rupture-risk studies.</td></tr>
+        </tbody>
+    </table>
+    <p>Combining more than one of these markers is explicitly recommended in current literature; single-metric
+    (TAWSS- or OSI-only) assessment is noted to be an oversimplification of the true multi-factorial hemodynamic
+    environment at the aneurysm wall.</p>
+
+    <h2 class="subsection-title">4.3 Clinical Risk Scoring (PHASES)</h2>
+    <p>The <strong>PHASES</strong> score (Greving et al., 2014) is a validated, points-based score for estimating
+    the 5-year cumulative rupture risk of an unruptured intracranial aneurysm from six independent factors:
+    <strong>P</strong>opulation/ethnicity, <strong>H</strong>ypertension, <strong>A</strong>ge, aneurysm
+    <strong>S</strong>ize, <strong>E</strong>arlier subarachnoid hemorrhage from a different aneurysm, and
+    <strong>S</strong>ite of the aneurysm. It is a purely demographic/morphological score &mdash; it does not use
+    any hemodynamic (flow) information. Current clinical guidance recommends combining scores like PHASES with
+    imaging-derived and hemodynamic assessment for a fuller risk picture, since morphological/demographic scores
+    alone have been shown in follow-up studies to under-perform when used as the sole predictor of subsequent
+    rupture. This is the rationale for reporting the PHASES score in this project as a distinct, complementary
+    panel alongside &mdash; not merged into &mdash; the CFD-derived Composite Risk Index.</p>
+
+    <h2 class="subsection-title">4.4 Related Open-Source Tools</h2>
+    <ul>
+        <li><strong>SimVascular</strong> &mdash; the only fully open-source, end-to-end pipeline from medical
+        image segmentation through patient-specific CFD simulation.</li>
+        <li><strong>VMTK (Vascular Modeling Toolkit)</strong> &mdash; vessel-lumen segmentation and centreline
+        extraction, commonly used upstream of meshing.</li>
+        <li><strong>OpenFOAM</strong> &mdash; open-source finite-volume CFD solver, applicable to the
+        Navier&ndash;Stokes solve stage of the pipeline.</li>
+        <li><strong>Cornerstone.js</strong> &mdash; open-source JavaScript library (used to build the OHIF
+        radiology viewer) for standards-compliant, web-based DICOM image rendering.</li>
+    </ul>
+</div>
+
+<!-- ============ 5. SYSTEM DESIGN ============ -->
+<div class="section">
+    <h1 class="section-title">5. System Design &amp; Architecture</h1>
+
+    <h2 class="subsection-title">5.1 Technology Stack</h2>
+    <table>
+        <thead><tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr></thead>
+        <tbody>
+            <tr><td>Structure &amp; Styling</td><td>HTML5, CSS3</td><td>Dashboard layout, responsive panels,
+            print-styled clinical report</td></tr>
+            <tr><td>Application Logic</td><td>Vanilla JavaScript (ES6+)</td><td>State management, DOM rendering,
+            metric computation, pipeline orchestration</td></tr>
+            <tr><td>2D Visualization</td><td>HTML5 Canvas API</td><td>Hemodynamic heatmap, mesh/convergence
+            animation panels</td></tr>
+            <tr><td>3D Visualization</td><td>Three.js (WebGL), GLTFLoader, OrbitControls</td><td>Interactive 3D
+            nerve/vessel model with per-vertex risk coloring</td></tr>
+            <tr><td>Backend Prototype</td><td>Python 3, <code>pydicom</code></td><td>Real DICOM metadata
+            extraction (Patient ID, Modality, Slice Thickness, etc.)</td></tr>
+            <tr><td>Icons / Typography</td><td>Font Awesome, Google Fonts (Ubuntu)</td><td>UI iconography and
+            typography</td></tr>
+        </tbody>
+    </table>
+
+    <h2 class="subsection-title">5.2 Architectural Overview</h2>
+    <p>The application follows a client-side, single-page architecture with a clear separation between the
+    <strong>data model</strong> (an in-memory patient database keyed by patient ID, each record holding raw
+    hemodynamic zone data, morphology, and demographics), <strong>derived-metric functions</strong> (pure
+    functions that compute CRI, RRT, ECAP, and PHASES from the raw data on every render, so displayed values can
+    never drift out of sync with their inputs), and the <strong>rendering layer</strong> (Canvas 2D heatmap,
+    Three.js 3D viewer, and DOM-based gauge/report components), all coordinated by a central patient-selection
+    state.</p>
+
+    <h2 class="subsection-title">5.3 Data Flow</h2>
+    <ol>
+        <li>User selects a patient card, or uploads a DICOM/MRA file (triggering the simulated ingestion
+        pipeline).</li>
+        <li>The active patient record (hemodynamic zones, morphology, demographics) is set as global state.</li>
+        <li>Derived-metric functions recompute CRI, RRT, ECAP, and PHASES from that record.</li>
+        <li>The 2D canvas, 3D viewer, telemetry gauges, and patient list all re-render from the same recomputed
+        values.</li>
+        <li>On "Expand Case Review," the same values are formatted into the clinical report view and made
+        exportable via the browser print pipeline.</li>
+    </ol>
+</div>
+
+<!-- ============ 6. IMPLEMENTATION ============ -->
+<div class="section">
+    <h1 class="section-title">6. Implementation</h1>
+
+    <h2 class="subsection-title">6.1 Patient Dashboard &amp; Data Model</h2>
+    <p>Each patient record stores an array of anatomical <strong>zones</strong> (Parent Artery Inlet, Parent
+    Artery Outlet, Aneurysm Neck, Aneurysm Dome), each carrying its own TAWSS and OSI reading &mdash; mirroring
+    how a real CFD post-processor reports results at discrete mesh nodes rather than as a single aggregate value.
+    Patient cards in the sidebar display the live-computed Composite Risk Index and aneurysm diameter, and
+    include a delete control (with confirmation, and safeguards against removing the last remaining case) so
+    uploaded or mock cases can be managed without a page reload.</p>
+
+    <h2 class="subsection-title">6.2 2D Hemodynamic Heatmap</h2>
+    <p>The heatmap is drawn on an HTML5 Canvas as a parent-artery tube with an aneurysm neck/dome rising from its
+    midpoint. Each zone's color is computed by linearly interpolating between a stable-blue and critical-red hex
+    color, using a mode-dependent normalization: TAWSS values are inverted (low TAWSS &rarr; red) and normalized
+    against a 0.15&ndash;1.5 Pa range; OSI values are normalized directly against a 0.03&ndash;0.35 range. Healthy
+    parent-artery zones have their color factor dampened (&times;0.2) so that non-aneurysm anatomy remains
+    visually calm even under the same color scale. Hovering any node opens a tooltip with its exact TAWSS/OSI
+    readings and a rupture-vulnerability flag where applicable.</p>
+
+    <h2 class="subsection-title">6.3 3D Neuro-Vascular Visualization</h2>
+    <p>A supplied <code>.glb</code> 3D asset was found on inspection to contain three sub-meshes: a
+    high-density (&asymp;450,000-vertex) branching vessel/nerve network, and two lower-relevance solid brain-shape
+    meshes bundled in the same file. Only the vessel/nerve mesh is rendered; the brain-shape meshes are hidden,
+    since they would otherwise visually occlude the vessel network entirely. Risk coloring is applied
+    <strong>per vertex</strong> rather than as a uniform tint: a "hotspot" region is approximated as the topmost
+    cluster of vertices (consistent with where the aneurysm dome is positioned in the 2D layout), and each
+    vertex's redness is scaled by both its proximity to that hotspot and the patient's live TAWSS/OSI-derived
+    risk factor &mdash; so the vessel network stays blue overall, with only the clinically critical region
+    shifting toward red. The viewer supports mouse-driven orbit/zoom via Three.js <code>OrbitControls</code>.</p>
+
+    <h2 class="subsection-title">6.4 Composite Risk Index &amp; Explainability</h2>
+    <p>The Composite Risk Index (CRI) is computed live, not stored, as a weighted sum of four normalized
+    sub-scores:</p>
+    <div class="formula-block">CRI = 0.35&middot;TAWSS_score + 0.30&middot;OSI_score + 0.20&middot;Diameter_score + 0.15&middot;AspectRatio_score
+
+TAWSS_score    = clamp01((1.5 &minus; TAWSS) / (1.5 &minus; 0.15)) &times; 100
+OSI_score      = clamp01((OSI &minus; 0.03) / (0.35 &minus; 0.03)) &times; 100
+Diameter_score = clamp01((Diameter &minus; 2.0) / (10.0 &minus; 2.0)) &times; 100
+Aspect_score   = clamp01((AspectRatio &minus; 0.7) / (2.5 &minus; 0.7)) &times; 100</div>
+    <p>Scores of 75 or above are classified High Rupture Risk, 45&ndash;74 Moderate, and below 45 Stable/Low
+    Risk. Because every consumer of this score (patient cards, the composite gauge, the report modal) calls the
+    same function against the same underlying zone data, the displayed number can never disagree with the raw
+    metrics shown elsewhere in the dashboard. A breakdown panel beneath the gauge renders each factor's
+    percentage contribution as a labeled bar, directly answering "how was this number produced?" for the
+    benefit of clinical (and academic) review.</p>
+
+    <h2 class="subsection-title">6.5 Advanced Hemodynamic Markers</h2>
+    <p>RRT and ECAP (defined in Section 4.2) are computed from the same dome TAWSS/OSI values and displayed as
+    two additional radial gauges, with alert thresholds of RRT &gt; 3.0 Pa<sup>&minus;1</sup> and ECAP &gt; 1.0
+    respectively. The RRT formula's denominator is numerically guarded against the OSI &rarr; 0.5 singularity.</p>
+
+    <h2 class="subsection-title">6.6 PHASES Clinical Risk Score</h2>
+    <p>Each patient record carries a <code>demographics</code> object (age, hypertension status, prior SAH
+    history, population category, aneurysm site). A dedicated scoring function reproduces the published PHASES
+    point table and 5-year cumulative risk-percentage lookup, and renders both the point breakdown and resulting
+    percentage in a dedicated card, explicitly labeled as a demographic/morphological score used <em>alongside</em>
+    the hemodynamic CRI rather than folded into it &mdash; consistent with the multimodal approach described in
+    Section 4.3.</p>
+
+    <h2 class="subsection-title">6.7 Simulated CFD Pipeline (6-Stage)</h2>
+    <p>Uploading a DICOM/MRA file triggers a six-stage, timed visualization mirroring the real-world pipeline
+    described in Section 4.1: (1) DICOM ingestion &amp; metadata parsing, (2) AI segmentation, (3) surface/volume
+    mesh generation, (4) boundary-condition assignment, (5) CFD solver execution with a live residual-convergence
+    plot, and (6) metric extraction &amp; report compilation. Each stage renders its own Canvas-based animation
+    (an axial-scan overlay, a rotating wireframe mesh, a pulsatile inflow waveform, and a logarithmic convergence
+    curve respectively) alongside a scrolling terminal log. On completion, a new patient record is generated
+    with hemodynamic values seeded from the filename pattern, and the same live-computed CRI/RRT/ECAP/PHASES
+    pipeline is applied to it exactly as it is for the seed patients.</p>
+
+    <h2 class="subsection-title">6.8 Clinical Report Generation</h2>
+    <p>The "Expand Case Review" report compiles all computed metrics (TAWSS, OSI, RRT, ECAP, diameter, aspect
+    ratio, Composite Risk Score, and the full PHASES breakdown) into a structured table against their clinical
+    thresholds, alongside a snapshot of the current heatmap and a narrative clinical assessment. The report is
+    exportable via the browser's print pipeline to PDF.</p>
+
+    <h2 class="subsection-title">6.9 DICOM Metadata Parsing (Python Backend)</h2>
+    <p>A standalone Python module (<code>neuroflow-local-pipeline/</code>) uses <code>pydicom</code> to safely
+    extract standard DICOM header fields (<code>PatientID</code>, <code>Modality</code>, <code>StudyDate</code>,
+    <code>Rows</code>, <code>Columns</code>, <code>SliceThickness</code>) via defensive <code>getattr()</code>
+    access, with physiological constants (blood density 1060 kg/m&sup3;, viscosity 0.0035 Pa&middot;s) centralized
+    in a configuration module. This is the one component of the pipeline that performs genuine, non-simulated
+    processing on real DICOM input, and is structured so it can be dropped directly into an asynchronous task
+    worker (e.g., Celery) in a future backend-integrated version.</p>
+</div>
+
+<!-- ============ 7. RESULTS & SCREENSHOTS ============ -->
+<div class="section">
+    <h1 class="section-title">7. Results &amp; Screenshots</h1>
+    <p>The following figures document the working application across its major views, captured from a live
+    session of the dashboard.</p>
+
+    <div class="figure">
+        <img src="images/01_dashboard_2d_heatmap_high_risk.png" alt="2D Hemodynamic Heatmap - High Risk Patient">
+        <div class="figure-caption">Figure 7.1 &mdash; Main dashboard: 2D Hemodynamic Heatmap for a high-risk
+        patient (PT-2025-0041, CRI 92/100). The aneurysm dome and neck render deep red under low TAWSS, while the
+        parent artery remains blue. The right-hand telemetry panel shows the Composite Risk Index with its
+        factor-level breakdown, TAWSS/OSI/RRT/ECAP gauges, morphology, and the PHASES clinical risk score.</div>
+    </div>
+
+    <div class="figure">
+        <img src="images/02_dashboard_3d_nerve_model.png" alt="3D Neuro-Vascular Risk Model">
+        <div class="figure-caption">Figure 7.2 &mdash; 3D Neuro-Vascular Risk Model view for the same high-risk
+        patient. Per-vertex coloring keeps the vessel/nerve network blue overall, with only the region near the
+        approximated aneurysm site shifting to red &mdash; scaled by the patient's live TAWSS/OSI risk factor.</div>
+    </div>
+
+    <div class="figure">
+        <img src="images/03_dashboard_2d_heatmap_low_risk_osi.png" alt="2D Heatmap - Low Risk Patient, OSI Mode">
+        <div class="figure-caption">Figure 7.3 &mdash; 2D heatmap for a low-risk patient (PT-2025-0039, CRI
+        26/100) in OSI Instability display mode, showing the map-mode toggle and the corresponding stable
+        (blue-dominant) coloring.</div>
+    </div>
+
+    <div class="figure">
+        <img src="images/05_simulation_mesh_generation.png" alt="Simulated Pipeline - Mesh Generation Stage">
+        <div class="figure-caption">Figure 7.4 &mdash; Simulated CFD pipeline, Stage 3 (Mesh Generation), showing
+        the rotating wireframe animation and scrolling solver shell log alongside the six-stage progress
+        tracker.</div>
+    </div>
+
+    <div class="figure">
+        <img src="images/06_simulation_cfd_execution.png" alt="Simulated Pipeline - CFD Execution Stage">
+        <div class="figure-caption">Figure 7.5 &mdash; Simulated CFD pipeline, Stage 5 (CFD Execution), showing
+        the live Navier&ndash;Stokes residual convergence graph and iteration log.</div>
+    </div>
+
+    <div class="figure">
+        <img src="images/04_clinical_report_modal.png" alt="Clinical CFD Insights Report">
+        <div class="figure-caption">Figure 7.6 &mdash; Exportable Clinical CFD Insights Report for the high-risk
+        patient, showing the full Clinical Metric Matrix (including RRT and ECAP) against their clinical
+        thresholds, and the dynamic anatomical target derived from the patient's PHASES site data.</div>
+    </div>
+</div>
+
+<!-- ============ 8. TESTING ============ -->
+<div class="section">
+    <h1 class="section-title">8. Testing &amp; Validation</h1>
+    <p>The application was validated through automated, browser-driven end-to-end testing (Playwright with
+    headless Chromium) covering:</p>
+    <ul>
+        <li><strong>Cross-view consistency</strong> &mdash; verifying that switching patients or toggling
+        TAWSS/OSI mode updates the 2D heatmap, 3D model, all gauges, and the report modal in agreement, with no
+        stale or conflicting values.</li>
+        <li><strong>Numerical correctness</strong> &mdash; RRT, ECAP, Composite Risk Index, and PHASES score
+        outputs were independently hand-calculated for each seed patient and cross-checked against the
+        rendered UI values.</li>
+        <li><strong>Layout regression testing</strong> &mdash; automated bounding-box measurements were used to
+        verify that UI elements (e.g., the CFD convergence graph, the extraction-stage checklist) render
+        correctly centered within their containers.</li>
+        <li><strong>Interaction flows</strong> &mdash; the full upload &rarr; six-stage pipeline &rarr; new
+        patient record flow, patient deletion (including edge cases such as deleting the active patient or the
+        last remaining case), and report export were exercised end-to-end.</li>
+        <li><strong>Console/runtime error monitoring</strong> &mdash; every test run captured browser console
+        and page errors; all reported results in this document reflect a zero-error state.</li>
+    </ul>
+</div>
+
+<!-- ============ 9. LIMITATIONS ============ -->
+<div class="section">
+    <h1 class="section-title">9. Limitations</h1>
+    <div class="callout honesty">
+        <strong>Transparency note.</strong> This section is included deliberately: an accurate account of what
+        is simulated versus computed is, in the authors' view, part of correct academic documentation for this
+        project.
+    </div>
+    <ul>
+        <li><strong>The segmentation, meshing, and Navier&ndash;Stokes solver stages are simulated.</strong> The
+        six-stage upload pipeline (Section 6.7) is a scripted, timed visualization that reproduces the
+        real-world CFD workflow's stages, log format, and terminology, but does not perform actual image
+        segmentation, mesh generation, or fluid-dynamics computation.</li>
+        <li><strong>Patient hemodynamic data is a curated demonstration dataset.</strong> The three seed patients
+        represent illustrative High/Moderate/Low risk profiles; values for newly "uploaded" cases are seeded
+        from a filename pattern rather than derived from the uploaded file's actual image content.</li>
+        <li><strong>The 3D hotspot region is a geometric approximation.</strong> The supplied 3D asset carries no
+        per-vertex clinical zone labels, so the "critical region" highlighted in the 3D view is inferred from
+        vertex position (Section 6.3) rather than verified anatomical correspondence.</li>
+        <li><strong>No persistence layer.</strong> All patient data is held in-memory and is reset on page
+        reload; there is no database or server-side storage.</li>
+    </ul>
+    <p>What <em>is</em> real and independently verifiable in the current system: the Composite Risk Index, RRT,
+    ECAP, and PHASES score computations (Sections 6.4&ndash;6.6); the DICOM metadata parser (Section 6.9); and
+    the full rendering/visualization pipeline.</p>
+</div>
+
+<!-- ============ 10. FUTURE WORK ============ -->
+<div class="section">
+    <h1 class="section-title">10. Future Work</h1>
+    <ol>
+        <li><strong>Real segmentation and meshing backend</strong> integrating an open-source pipeline such as
+        SimVascular with VMTK for vessel extraction (Section 4.4), replacing the simulated Stage 2&ndash;3
+        animations with genuine 3D reconstruction from uploaded imaging.</li>
+        <li><strong>Real CFD solver integration</strong> via OpenFOAM, executing the actual unsteady
+        Navier&ndash;Stokes solve against patient-specific boundary conditions rather than a scripted convergence
+        curve.</li>
+        <li><strong>A trained ML surrogate model</strong> (e.g., a lightweight regression or graph neural network)
+        predicting hemodynamic outcomes directly from morphology, offering near-real-time estimates without a
+        full CFD solve for triage use cases &mdash; mirroring current research directions in CFD surrogate
+        modeling.</li>
+        <li><strong>A real DICOM image viewer</strong> using Cornerstone.js, replacing the current
+        metadata-only text parsing with standards-compliant medical image rendering.</li>
+        <li><strong>Validation against public benchmark datasets</strong> such as AneuriskWeb or the newer Aneumo
+        dataset, to quantitatively assess the Composite Risk Index's agreement with documented rupture outcomes.</li>
+        <li><strong>Mesh-convergence and uncertainty quantification studies</strong>, standard practice in
+        published patient-specific CFD work, once a real solver is integrated.</li>
+        <li><strong>Longitudinal, multi-visit patient tracking</strong>, enabling the dashboard to show
+        hemodynamic and morphological change over time for the same patient &mdash; consistent with the
+        cardiovascular "digital twin" direction in current research.</li>
+    </ol>
+</div>
+
+<!-- ============ 11. CONCLUSION ============ -->
+<div class="section">
+    <h1 class="section-title">11. Conclusion</h1>
+    <p>NeuroFlow CFD Analyst demonstrates a complete, clinically-informed dashboard layer for cerebral aneurysm
+    hemodynamic risk assessment: a live-computed, explainable Composite Risk Index; supplementary CFD-literature
+    markers (RRT, ECAP); an independent, validated demographic risk score (PHASES); 2D and 3D visualizations
+    driven by the same underlying data; and an exportable clinical report. The project's real backend component
+    &mdash; DICOM metadata parsing &mdash; establishes a concrete foundation for the segmentation, meshing, and
+    solver integration work identified in Section 10 as the path to a fully computed (rather than visualized)
+    hemodynamic simulation system. Documenting clearly which components are computed versus simulated (Section
+  9) was treated as a first-class design requirement throughout the project, consistent with the standards
+    expected of clinically-oriented software.</p>
+</div>
+
+<!-- ============ 12. REFERENCES ============ -->
+<div class="section">
+    <h1 class="section-title">12. References</h1>
+    <ol class="refs-list">
+        <li>Greving, J. P., et al. (2014). <em>Development of the PHASES score for prediction of risk of rupture
+        of intracranial aneurysms: a pooled analysis of six prospective cohort studies.</em> The Lancet
+        Neurology.</li>
+        <li>Meng, H., Tutino, V. M., Xiang, J., &amp; Siddiqui, A. (2014). <em>High WSS or Low WSS? Complex
+        interactions of hemodynamics with intracranial aneurysm initiation, growth, and rupture: toward a
+        unifying hypothesis.</em> American Journal of Neuroradiology.</li>
+        <li>CFD-based hemodynamic markers for cerebral aneurysm rupture-risk prediction. arXiv:2504.10524.</li>
+        <li>Relative Residence Time and Endothelial Cell Activation Potential in cerebral aneurysm hemodynamics.
+        PMC11907627.</li>
+        <li>Updahyaya et al. Semi-automated open-source pipeline for anterior brain vasculature CFD simulation.
+        Scientific Reports (2024).</li>
+        <li>Updegrove, A., et al. <em>SimVascular: An Open Source Pipeline for Cardiovascular Simulation.</em>
+        Annals of Biomedical Engineering.</li>
+        <li>Cornerstone.js &mdash; Open Health Imaging Foundation. <span class="code-inline">cornerstonejs.org</span></li>
+        <li>Aneumo: a large-scale multimodal aneurysm CFD and deep-learning benchmark dataset. arXiv:2505.14717.</li>
+        <li>AneuriskWeb project repository &mdash; Emory University Center for Computational and Modeling of
+        Engineering.</li>
+        <li>Evaluating CFD Uncertainty via Grid Convergence Index in patient-specific aorta models.
+        arXiv:2309.05509.</li>
+    </ol>
+</div>
+
+</body>
+</html>

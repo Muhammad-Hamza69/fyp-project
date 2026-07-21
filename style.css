@@ -680,6 +680,133 @@ body {
     text-transform: uppercase;
 }
 
+/* Composite Risk Index explainability breakdown */
+.risk-breakdown {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #e2e8f0;
+}
+
+.risk-breakdown-row {
+    display: grid;
+    grid-template-columns: 74px 1fr 30px;
+    align-items: center;
+    gap: 8px;
+}
+
+.risk-breakdown-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-align: left;
+}
+
+.risk-breakdown-label em {
+    font-style: normal;
+    color: #94a3b8;
+}
+
+.risk-breakdown-bar-track {
+    background-color: #e2e8f0;
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+}
+
+.risk-breakdown-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(to right, var(--color-low-risk), var(--color-mod-risk), var(--color-high-risk));
+    border-radius: 4px;
+    transition: width 0.6s ease-in-out;
+}
+
+.risk-breakdown-pct {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: right;
+}
+
+/* PHASES Clinical Risk Score Card */
+.phases-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.phases-score-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.phases-score-value-wrap,
+.phases-risk-percent-wrap {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+}
+
+.phases-points,
+.phases-percent {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.phases-points-label,
+.phases-percent-label {
+    display: block;
+    font-size: 9px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+}
+
+.phases-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.phases-breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-secondary);
+    padding: 4px 0;
+    border-bottom: 1px dashed #f1f5f9;
+}
+
+.phases-breakdown-row span:last-child {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.phases-card-note {
+    font-size: 9.5px;
+    color: #94a3b8;
+    line-height: 1.4;
+    font-style: italic;
+    margin: 0;
+}
+
+.phases-report-note {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 8px;
+}
+
 /* Metric radial progress row */
 .metrics-row-two-col {
     display: grid;

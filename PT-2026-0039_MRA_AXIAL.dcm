@@ -4,9 +4,9 @@ NEUROFLOW CFD CLINICAL INGESTION PAYLOAD LAYER
 [META_HEADER_START]
 SOP_CLASS_UID          = 1.2.840.10008.5.1.4.1.1.2 (CT Image Storage)
 MODALITY               = MR (Magnetic Resonance Angiography)
-PATIENT_ID             = PT-2025-0061
+PATIENT_ID             = PT-2026-0039
 PATIENT_SEX            = ANONYMIZED
-STUDY_DATE             = 20260228
+STUDY_DATE             = 20260310
 MANUFACTURER           = Siemens Healthineers
 MODEL_NAME             = MAGNETOM Prisma
 ====================================================================
@@ -15,14 +15,14 @@ ROWS                   = 512
 COLUMNS                = 512
 SLICE_THICKNESS        = 0.50 mm
 SPATIAL_RESOLUTION     = Anisotropic
-NUMBER_OF_SLICES       = 148
+NUMBER_OF_SLICES       = 140
 DYNAMIC_RANGE          = 16-bit
 ====================================================================
 [TARGET_REGION_OF_INTEREST]
 ANATOMICAL_TARGET      = Cerebral Vasculature / Circle of Willis
 COORDINATE_SYSTEM      = RAS (Right-Anterior-Superior)
-VASCULAR_PATHOLOGY     = Positive Finding: Left MCA Bifurcation Saccular Aneurysm, Wide-Neck Morphology
-SURFACE_GEOMETRY_HASH  = c47a91e0fb2836d9a15c4e8b
+VASCULAR_PATHOLOGY     = Negative Finding: Small Stable ICA Outpouching, Normal Wall Shear Profile
+SURFACE_GEOMETRY_HASH  = 91ac0d4f7b2e386c1d5a9f04
 ====================================================================
 [RAW_VOXEL_DATA_STREAM_SIMULATED]
 // BINARY STREAM COMPRESSED //

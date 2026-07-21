@@ -34,6 +34,13 @@ const patientDatabase = {
             maxDiameter: 8.4,
             aspectRatio: 2.1
         },
+        demographics: {
+            age: 72,
+            hypertension: true,
+            earlierSAH: false,
+            population: "Other",
+            site: "MCA"
+        },
         zones: [
             { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 1.85, osi: 0.03, isAneurysm: false },
             { name: "Parent Artery Outlet", id: "3942", x: 470, y: 278, radius: 55, tawss: 1.62, osi: 0.04, isAneurysm: false },
@@ -48,6 +55,13 @@ const patientDatabase = {
             maxDiameter: 5.2,
             aspectRatio: 1.4
         },
+        demographics: {
+            age: 58,
+            hypertension: false,
+            earlierSAH: false,
+            population: "Other",
+            site: "ICA"
+        },
         zones: [
             { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 2.12, osi: 0.02, isAneurysm: false },
             { name: "Parent Artery Outlet", id: "3942", x: 470, y: 278, radius: 55, tawss: 1.84, osi: 0.03, isAneurysm: false },
@@ -61,6 +75,13 @@ const patientDatabase = {
         morphology: {
             maxDiameter: 3.1,
             aspectRatio: 0.9
+        },
+        demographics: {
+            age: 45,
+            hypertension: false,
+            earlierSAH: false,
+            population: "Other",
+            site: "ICA"
         },
         zones: [
             { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 1.95, osi: 0.04, isAneurysm: false },
@@ -79,7 +100,7 @@ function clamp01(v) {
     return Math.max(0, Math.min(1, v));
 }
 
-function computeCompositeRisk(patient) {
+function computeRiskBreakdown(patient) {
     const domeZone = patient.zones.find(z => z.name === "Aneurysm Dome");
     const { maxDiameter, aspectRatio } = patient.morphology;
 
@@ -89,7 +110,15 @@ function computeCompositeRisk(patient) {
     const aspectScore = clamp01((aspectRatio - 0.7) / (2.5 - 0.7)) * 100;
 
     const composite = (tawssScore * 0.35) + (osiScore * 0.30) + (diameterScore * 0.20) + (aspectScore * 0.15);
-    return Math.round(composite);
+
+    return {
+        tawssScore, osiScore, diameterScore, aspectScore,
+        composite: Math.round(composite)
+    };
+}
+
+function computeCompositeRisk(patient) {
+    return computeRiskBreakdown(patient).composite;
 }
 
 function getRiskTier(score) {
@@ -99,6 +128,84 @@ function getRiskTier(score) {
         return { riskLevel: "Moderate", badgeClass: "badge-moderate", riskLabel: "Moderate Risk Profile", riskLabelClass: "color-mod-risk" };
     }
     return { riskLevel: "Low", badgeClass: "badge-low", riskLabel: "Stable / Low Risk", riskLabelClass: "color-low-risk" };
+}
+
+// Relative Residence Time & Endothelial Cell Activation Potential: supplementary
+// hemodynamic markers derived from the same dome TAWSS/OSI, used in current CFD
+// rupture-risk literature alongside TAWSS/OSI (see project research notes).
+// RRT ~ 1 / ((1 - 2*OSI) * TAWSS); guarded against the OSI->0.5 singularity.
+function computeRRT(domeZone) {
+    const denom = Math.max(0.02, (1 - 2 * domeZone.osi) * domeZone.tawss);
+    return 1 / denom;
+}
+
+// ECAP = OSI / TAWSS - values above ~1.0 mean the oscillatory component
+// dominates over mean shear, a marker associated with elevated rupture risk.
+function computeECAP(domeZone) {
+    return domeZone.osi / Math.max(0.02, domeZone.tawss);
+}
+
+// PHASES score (Greving et al. 2014): a demographic/morphological rupture-risk
+// score used clinically alongside (not instead of) hemodynamic CFD assessment.
+// Population, Hypertension, Age, Size, Earlier SAH, Site of aneurysm.
+const PHASES_SITE_LABELS = {
+    ICA: "Internal Carotid Artery (ICA)",
+    MCA: "Middle Cerebral Artery (MCA)",
+    ACOM_PCOM_POST: "Ant./Post. Communicating or Posterior Circulation"
+};
+
+const PHASES_SITE_POINTS = {
+    ICA: 0,
+    MCA: 2,
+    ACOM_PCOM_POST: 4
+};
+
+const PHASES_POPULATION_POINTS = {
+    "Other": 0, // North American / European / Other
+    "Japanese": 3,
+    "Finnish": 5
+};
+
+// Cumulative 5-year rupture risk (%) by total PHASES point total
+const PHASES_RISK_TABLE = [
+    { max: 1, percent: 0.4 },
+    { max: 3, percent: 0.7 },
+    { max: 4, percent: 0.9 },
+    { max: 5, percent: 1.3 },
+    { max: 6, percent: 1.7 },
+    { max: 7, percent: 2.4 },
+    { max: 8, percent: 3.2 },
+    { max: 9, percent: 4.3 },
+    { max: 10, percent: 5.3 },
+    { max: 11, percent: 7.2 },
+    { max: Infinity, percent: 17.8 }
+];
+
+function phasesRiskPercentFromPoints(points) {
+    const bracket = PHASES_RISK_TABLE.find(b => points <= b.max);
+    return bracket.percent;
+}
+
+function computePhasesScore(patient) {
+    const d = patient.demographics;
+    const diameter = patient.morphology.maxDiameter;
+
+    let sizePoints = 0;
+    if (diameter >= 20.0) sizePoints = 10;
+    else if (diameter >= 10.0) sizePoints = 6;
+    else if (diameter >= 7.0) sizePoints = 3;
+
+    const items = [
+        { label: "Population", value: d.population, points: PHASES_POPULATION_POINTS[d.population] ?? 0 },
+        { label: "Hypertension", value: d.hypertension ? "Yes" : "No", points: d.hypertension ? 1 : 0 },
+        { label: "Age", value: `${d.age} yrs`, points: d.age >= 70 ? 1 : 0 },
+        { label: "Size of Aneurysm", value: `${diameter.toFixed(1)} mm`, points: sizePoints },
+        { label: "Earlier SAH (other aneurysm)", value: d.earlierSAH ? "Yes" : "No", points: d.earlierSAH ? 1 : 0 },
+        { label: "Site of Aneurysm", value: PHASES_SITE_LABELS[d.site], points: PHASES_SITE_POINTS[d.site] ?? 0 }
+    ];
+
+    const points = items.reduce((sum, item) => sum + item.points, 0);
+    return { items, points, riskPercent: phasesRiskPercentFromPoints(points) };
 }
 
 // Global App State
@@ -144,6 +251,29 @@ const osiAlertEl = document.getElementById("osi-alert");
 const morphMaxDiameterEl = document.getElementById("morph-max-diameter");
 const morphAspectRatioEl = document.getElementById("morph-aspect-ratio");
 
+// DOM Elements - RRT / ECAP Gauges
+const rrtGaugeValEl = document.getElementById("rrt-gauge-val");
+const ecapGaugeValEl = document.getElementById("ecap-gauge-val");
+const rrtProgressFill = document.getElementById("rrt-progress-fill");
+const ecapProgressFill = document.getElementById("ecap-progress-fill");
+const rrtAlertEl = document.getElementById("rrt-alert");
+const ecapAlertEl = document.getElementById("ecap-alert");
+
+// DOM Elements - Composite Risk Breakdown (explainability)
+const breakdownTawssFillEl = document.getElementById("breakdown-tawss-fill");
+const breakdownOsiFillEl = document.getElementById("breakdown-osi-fill");
+const breakdownDiameterFillEl = document.getElementById("breakdown-diameter-fill");
+const breakdownAspectFillEl = document.getElementById("breakdown-aspect-fill");
+const breakdownTawssPctEl = document.getElementById("breakdown-tawss-pct");
+const breakdownOsiPctEl = document.getElementById("breakdown-osi-pct");
+const breakdownDiameterPctEl = document.getElementById("breakdown-diameter-pct");
+const breakdownAspectPctEl = document.getElementById("breakdown-aspect-pct");
+
+// DOM Elements - PHASES Clinical Risk Score
+const phasesTotalPointsEl = document.getElementById("phases-total-points");
+const phasesRiskPercentEl = document.getElementById("phases-risk-percent");
+const phasesBreakdownEl = document.getElementById("phases-breakdown");
+
 // DOM Elements - Modals
 const expandCaseBtn = document.getElementById("expand-case-btn");
 const reportModalEl = document.getElementById("report-modal");
@@ -163,9 +293,17 @@ const reportDiameterValEl = document.getElementById("report-diameter-val");
 const reportDiameterStatusEl = document.getElementById("report-diameter-status");
 const reportAspectValEl = document.getElementById("report-aspect-val");
 const reportAspectStatusEl = document.getElementById("report-aspect-status");
+const reportRrtValEl = document.getElementById("report-rrt-val");
+const reportRrtStatusEl = document.getElementById("report-rrt-status");
+const reportEcapValEl = document.getElementById("report-ecap-val");
+const reportEcapStatusEl = document.getElementById("report-ecap-status");
 const reportCompositeScoreEl = document.getElementById("report-composite-score");
 const reportCompositeStatusEl = document.getElementById("report-composite-status");
 const reportClinicalTextEl = document.getElementById("report-clinical-text");
+const reportAnatomicalTargetEl = document.getElementById("report-anatomical-target");
+const reportPhasesBreakdownBodyEl = document.getElementById("report-phases-breakdown-body");
+const reportPhasesPointsEl = document.getElementById("report-phases-points");
+const reportPhasesPercentEl = document.getElementById("report-phases-percent");
 
 // DOM Elements - Upload & Simulation
 const sidebarUploadBox = document.getElementById("sidebar-upload-box");
@@ -271,12 +409,30 @@ function loadPatientData(patient) {
     // Radial Telemetry Progress Indicators
     updateRadialGauges();
 
+    // PHASES Clinical Risk Score (demographic/morphological, independent of CFD sim)
+    renderPhasesScore(patient);
+
     // 3D Nerve/Vascular Model Redraw (no-op until the 3D tab has been opened)
     if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(patient, currentMapMode);
 
     // Hide active tooltips on patient switch
     tooltipEl.classList.add("hidden");
     hoverZone = null;
+}
+
+// PHASES Clinical Risk Score Card Renderer
+function renderPhasesScore(patient) {
+    const { items, points, riskPercent } = computePhasesScore(patient);
+
+    phasesTotalPointsEl.textContent = points;
+    phasesRiskPercentEl.textContent = `${riskPercent.toFixed(1)}%`;
+
+    phasesBreakdownEl.innerHTML = items.map(item => `
+        <div class="phases-breakdown-row">
+            <span>${item.label} (${item.value})</span>
+            <span>${item.points} pt${item.points === 1 ? '' : 's'}</span>
+        </div>
+    `).join("");
 }
 
 // 4. Color Normalization and Heatmap Drawing
@@ -406,9 +562,20 @@ function drawHeatmap() {
 // 5. Radial Progress Telemetry Controllers
 function updateRadialGauges() {
     // 1. Composite Risk Index Gauge (Needle rotation + colors)
-    const score = computeCompositeRisk(activePatient);
+    const breakdown = computeRiskBreakdown(activePatient);
+    const score = breakdown.composite;
     const tier = getRiskTier(score);
     compositeRiskScoreEl.textContent = score;
+
+    // Explainability: show each factor's contribution to the score above
+    breakdownTawssFillEl.style.width = `${breakdown.tawssScore}%`;
+    breakdownTawssPctEl.textContent = `${Math.round(breakdown.tawssScore)}%`;
+    breakdownOsiFillEl.style.width = `${breakdown.osiScore}%`;
+    breakdownOsiPctEl.textContent = `${Math.round(breakdown.osiScore)}%`;
+    breakdownDiameterFillEl.style.width = `${breakdown.diameterScore}%`;
+    breakdownDiameterPctEl.textContent = `${Math.round(breakdown.diameterScore)}%`;
+    breakdownAspectFillEl.style.width = `${breakdown.aspectScore}%`;
+    breakdownAspectPctEl.textContent = `${Math.round(breakdown.aspectScore)}%`;
 
     // Set needle rotation: maps 0-100 score to -90deg to +90deg (180deg sweep)
     const needleRotation = -90 + (score / 100) * 180;
@@ -469,6 +636,42 @@ function updateRadialGauges() {
     } else {
         osiProgressFill.style.stroke = "var(--color-accent)";
         osiAlertEl.classList.add("hidden");
+    }
+
+    // 4. RRT Gauge (Dome value) - Relative Residence Time
+    const rrtVal = computeRRT(domeZone);
+    rrtGaugeValEl.textContent = rrtVal.toFixed(2);
+
+    // Map RRT progress ring: display range 0-10 Pa^-1 (values beyond just cap the ring)
+    rrtProgressFill.style.strokeDasharray = progressCircumference;
+    const rrtFactor = Math.min(1.0, rrtVal / 10.0);
+    rrtProgressFill.style.strokeDashoffset = progressCircumference - (rrtFactor * progressCircumference);
+
+    // RRT Threshold alert check (> 3.0 Pa^-1)
+    if (rrtVal > 3.0) {
+        rrtProgressFill.style.stroke = "var(--color-high-risk)";
+        rrtAlertEl.classList.remove("hidden");
+    } else {
+        rrtProgressFill.style.stroke = "var(--color-accent)";
+        rrtAlertEl.classList.add("hidden");
+    }
+
+    // 5. ECAP Gauge (Dome value) - Endothelial Cell Activation Potential
+    const ecapVal = computeECAP(domeZone);
+    ecapGaugeValEl.textContent = ecapVal.toFixed(2);
+
+    // Map ECAP progress ring: display range 0-2.0
+    ecapProgressFill.style.strokeDasharray = progressCircumference;
+    const ecapFactor = Math.min(1.0, ecapVal / 2.0);
+    ecapProgressFill.style.strokeDashoffset = progressCircumference - (ecapFactor * progressCircumference);
+
+    // ECAP Threshold alert check (> 1.0 - oscillatory component exceeds mean shear)
+    if (ecapVal > 1.0) {
+        ecapProgressFill.style.stroke = "var(--color-high-risk)";
+        ecapAlertEl.classList.remove("hidden");
+    } else {
+        ecapProgressFill.style.stroke = "var(--color-accent)";
+        ecapAlertEl.classList.add("hidden");
     }
 }
 
@@ -660,6 +863,31 @@ function openReportModal() {
     reportAspectStatusEl.innerHTML = activePatient.morphology.aspectRatio > 1.5
         ? `<span class="color-high-risk">Elongated (&gt;1.5)</span>`
         : `<span class="color-low-risk">Normal</span>`;
+
+    const rrtVal = computeRRT(domeZone);
+    reportRrtValEl.textContent = `${rrtVal.toFixed(2)} Pa⁻¹`;
+    reportRrtStatusEl.innerHTML = rrtVal > 3.0
+        ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> Elevated Residence</span>`
+        : `<span class="color-low-risk">Normal</span>`;
+
+    const ecapVal = computeECAP(domeZone);
+    reportEcapValEl.textContent = ecapVal.toFixed(2);
+    reportEcapStatusEl.innerHTML = ecapVal > 1.0
+        ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> High Activation</span>`
+        : `<span class="color-low-risk">Normal</span>`;
+
+    reportAnatomicalTargetEl.textContent = PHASES_SITE_LABELS[activePatient.demographics.site] || "Cerebral Aneurysm";
+
+    const phases = computePhasesScore(activePatient);
+    reportPhasesBreakdownBodyEl.innerHTML = phases.items.map(item => `
+        <tr>
+            <td>${item.label}</td>
+            <td>${item.value}</td>
+            <td>${item.points}</td>
+        </tr>
+    `).join("");
+    reportPhasesPointsEl.textContent = `${phases.points} pts`;
+    reportPhasesPercentEl.textContent = `${phases.riskPercent.toFixed(1)}%`;
 
     reportCompositeScoreEl.textContent = `${compositeScore}/100`;
     let compositeStatusText = "STABLE / LOW RISK";
@@ -1170,12 +1398,21 @@ async function runCfdSimulation(fileObject) {
         const osi = (scenario === "High") ? 0.34 : (scenario === "Moderate" ? 0.22 : 0.08);
         const maxDiameter = (scenario === "High") ? 6.8 : (scenario === "Moderate" ? 5.2 : 3.1);
         const aspectRatio = (scenario === "High") ? 1.8 : (scenario === "Moderate" ? 1.4 : 0.9);
+        const age = (scenario === "High") ? 70 : (scenario === "Moderate" ? 55 : 40);
+        const site = (scenario === "High") ? "MCA" : "ICA";
 
         patientDatabase[patientId] = {
             id: patientId,
             morphology: {
                 maxDiameter: maxDiameter,
                 aspectRatio: aspectRatio
+            },
+            demographics: {
+                age: age,
+                hypertension: scenario === "High",
+                earlierSAH: false,
+                population: "Other",
+                site: site
             },
             zones: [
                 { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 1.92, osi: 0.03, isAneurysm: false },
