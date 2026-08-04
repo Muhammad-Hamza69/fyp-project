@@ -1,0 +1,26 @@
+{
+  "model_version": "lgbm-synth-v1",
+  "features": [
+    "tawss_sac_pa",
+    "osi_sac",
+    "rrt_sac",
+    "ecap_sac",
+    "nwss",
+    "lsar_relative",
+    "max_diameter_mm",
+    "aspect_ratio",
+    "dome_to_neck",
+    "non_sphericity_index",
+    "age",
+    "hypertension",
+    "earlier_sah",
+    "site_score"
+  ],
+  "n_train": 4000,
+  "prevalence": 0.16075,
+  "cv_auc_mean": 0.620251586145876,
+  "cv_auc_std": 0.039222335264707135,
+  "cv_brier_mean": 0.13468566835349574,
+  "training_data": "SYNTHETIC \u2014 generated from published risk relationships",
+  "clinical_validity": "ILLUSTRATIVE ONLY. Not trained or validated on patient data. Demonstrates the feature/inference/explainability pipeline. Must not be used for clinical decision-making."
+}

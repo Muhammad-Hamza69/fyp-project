@@ -322,23 +322,57 @@ const activeStepBadge = document.getElementById("active-step-badge");
 // Loaded additively and defensively: if the fetch fails (opened over file://,
 // or the file has not been generated yet) the dashboard silently keeps its
 // demonstration dataset, so the UI can never be broken by a missing solve.
-async function loadRealCfdCases() {
+// Where to look for computed cases, in priority order:
+//   1. the live API  (FastAPI -> Neon Postgres) when one is reachable
+//   2. the static export produced by pipeline/export_patient.py
+//
+// Both return the identical payload shape, so the rendering code below is
+// unaware of which one answered. The static file is what the deployed static
+// site uses; the API is what a local full-stack demo uses.
+const API_BASE = (window.NEUROFLOW_API_BASE || "http://127.0.0.1:8000").replace(/\/$/, "");
+
+async function fetchComputedCases() {
+    // Short timeout: if no API is running (the normal case for the deployed
+    // static site) we must not stall the dashboard waiting for a refused
+    // connection before falling back.
+    try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 2500);
+        const res = await fetch(`${API_BASE}/api/v1/dashboard/patients`, {
+            cache: "no-store", signal: ctrl.signal
+        });
+        clearTimeout(timer);
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data.patients) && data.patients.length) {
+                return { cases: data.patients, source: "api" };
+            }
+        }
+    } catch (_) {
+        /* no API reachable — fall through to the static export */
+    }
+
     try {
         const res = await fetch("real-cfd-patients.json", { cache: "no-store" });
-        if (!res.ok) return 0;
+        if (!res.ok) return { cases: [], source: "none" };
         const data = await res.json();
-        const cases = Array.isArray(data.patients) ? data.patients : [];
-        cases.forEach(p => { patientDatabase[p.id] = p; });
-        if (cases.length > 0) {
-            // Make a computed case the landing view — the real numbers are the
-            // point of the project, so they should not be buried below the mocks.
-            activePatient = patientDatabase[cases[0].id];
-        }
-        return cases.length;
+        return { cases: Array.isArray(data.patients) ? data.patients : [], source: "static" };
     } catch (err) {
         console.info("[NeuroFlow] No computed CFD cases available; using demonstration dataset.", err.message);
-        return 0;
+        return { cases: [], source: "none" };
     }
+}
+
+async function loadRealCfdCases() {
+    const { cases, source } = await fetchComputedCases();
+    cases.forEach(p => { patientDatabase[p.id] = p; });
+    if (cases.length > 0) {
+        // Make a computed case the landing view — the real numbers are the
+        // point of the project, so they should not be buried below the mocks.
+        activePatient = patientDatabase[cases[0].id];
+    }
+    window.__neuroDataSource = source;
+    return cases.length;
 }
 
 // Initialize Application
@@ -354,7 +388,10 @@ async function initApp() {
     reportDateGeneratedEl.textContent = today;
 
     if (nReal > 0) {
-        console.info(`[NeuroFlow] Loaded ${nReal} case(s) computed by OpenFOAM.`);
+        const via = window.__neuroDataSource === "api"
+            ? "live API (FastAPI → Neon PostgreSQL)"
+            : "static export";
+        console.info(`[NeuroFlow] Loaded ${nReal} case(s) computed by OpenFOAM, via ${via}.`);
     }
 }
 

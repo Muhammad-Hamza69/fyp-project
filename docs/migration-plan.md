@@ -1,5 +1,35 @@
 # Neuro-Flow — Migration to the SAD V3 Hybrid Architecture
 
+> ## STATUS — 2026-08-04
+>
+> This is the **planning** document. For what was actually built, measured and
+> verified, see **[CFD_METHODS_AND_RESULTS.md](CFD_METHODS_AND_RESULTS.md)**.
+>
+> **Delivered:**
+> - Phase 0 / 0.5 — environment relocated to D:, OpenFOAM ESI v2412, VMTK 1.5.0,
+>   worker venv, five cloud services authenticated, Supabase storage provisioned
+>   and round-trip verified.
+> - Phase 3 (partial) — `packages/shared` risk library ported verbatim from
+>   `app.js` with **20 golden tests** pinning the original patients' scores.
+> - **Spike 2A + 2C-2 PASSED** — real geometry → snappyHexMesh (522k cells,
+>   `Mesh OK`) → OpenFOAM → hemodynamics. Parent artery 2.97 Pa, aneurysm sac
+>   0.236 Pa, verified against the analytic Poiseuille solution (2.56 Pa, +16%).
+> - Computed cases wired into the dashboard with provenance badges; deployed.
+>
+> **Deviations from this plan:**
+> - **Object storage: Cloudflare R2 → Supabase** (R2 activation requires a
+>   payment method). Wrapped behind a `StorageBackend` interface — see the
+>   "Object storage" section below.
+> - **Geometry: AneuriskWeb → parametric.** The Emory host returns HTTP 404;
+>   the repository is gone. Fallback 2 from Phase 2C was taken.
+> - **Prism layers on the aneurysm sac: unresolved** after three configurations.
+>   Quantified at ≈ +16% WSS overestimate and documented as a limitation rather
+>   than hidden.
+>
+> **Not built:** React/Vite rewrite, FastAPI gateway, Clerk auth, Celery/Redis
+> queue, report service, AI risk model, automatic segmentation. The dashboard
+> remains the original vanilla-JS application, now fed by real CFD output.
+
 ## Context
 
 `d:\fyp` currently holds **NeuroFlow CFD Analyst**: 4 vanilla files (`index.html`, `app.js`, `style.css`, `neuro3d.js`), no build step, no backend, patient data as an in-memory object literal. Its own documentation PDF §9 states plainly that segmentation, meshing and the Navier–Stokes solver are *scripted animation*, and lists real CFD as Future Work.
