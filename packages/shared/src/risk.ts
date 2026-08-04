@@ -220,10 +220,18 @@ const PHASES_RISK_TABLE: readonly { max: number; percent: number }[] = [
   { max: Infinity, percent: 17.8 },
 ];
 
+/** Highest bracket, used when no other matches. Named so the fallback below
+ *  needs no array indexing — `noUncheckedIndexedAccess` correctly types
+ *  `table[table.length - 1]` as possibly undefined, and silencing that with a
+ *  non-null assertion would hide a genuine class of bug elsewhere. */
+const PHASES_MAX_RISK_PERCENT = 17.8;
+
 export function phasesRiskPercentFromPoints(points: number): number {
   const bracket = PHASES_RISK_TABLE.find((b) => points <= b.max);
-  // The table's final entry is Infinity, so this is unreachable in practice.
-  return bracket ? bracket.percent : PHASES_RISK_TABLE[PHASES_RISK_TABLE.length - 1].percent;
+  // The table's final entry has max = Infinity, so `find` always matches and
+  // the fallback is unreachable in practice — but it is kept rather than
+  // asserted away, so editing the table can never produce a silent NaN.
+  return bracket?.percent ?? PHASES_MAX_RISK_PERCENT;
 }
 
 export function computePhasesScore(input: RiskInput): PhasesResult {

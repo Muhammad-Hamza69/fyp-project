@@ -1,0 +1,135 @@
+name: CI
+
+# The test suite only protects the project if it runs without someone
+# remembering to run it. In particular the risk-parity tests exist to catch the
+# TypeScript and Python composite-score implementations drifting apart — a
+# divergence that would show different risk scores on the dashboard and in the
+# PDF report with no way to tell which was right. That check is worthless if it
+# only runs on one developer's machine.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared:
+    name: shared risk library (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Golden tests pinning the three original demonstration patients to
+      # 92 / 62 / 26. These are what make the port from the pre-migration
+      # app.js provably behaviour-preserving.
+      - name: vitest
+        run: pnpm -r test
+
+      - name: typecheck
+        run: pnpm -r typecheck
+
+  python:
+    name: worker + API (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      # System libraries VTK needs to import headlessly. Without libgl1 the
+      # import fails with a bare ImportError that looks like a missing wheel.
+      - name: system deps for VTK
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1 libxrender1 libxcursor1 libxinerama1 libxft2
+
+      - name: install python deps
+        run: |
+          python -m pip install -q --upgrade pip
+          python -m pip install -q -r requirements-ci.txt
+
+      # No OpenFOAM in CI: every test builds its fields analytically or from
+      # synthetic solver logs, so the suite runs in seconds and needs no solver.
+      - name: worker tests
+        working-directory: services/worker
+        run: python -m pytest tests/ -q -p no:warnings
+
+      - name: API tests
+        working-directory: services/api
+        env:
+          DATABASE_URL: sqlite+pysqlite:///:memory:
+        run: python -m pytest tests/ -q -p no:warnings
+
+  api-contract:
+    name: OpenAPI contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: install
+        run: |
+          python -m pip install -q --upgrade pip
+          python -m pip install -q fastapi pydantic pydantic-settings sqlalchemy \
+            "psycopg[binary]" "pyjwt[crypto]" python-dotenv
+
+      # /api/v1 is additive-only: new optional fields and new endpoints are
+      # fine, but renaming, removing or narrowing a field requires /api/v2
+      # served alongside. This fails the build if a committed path disappears.
+      - name: schema generates and keeps its committed paths
+        working-directory: services/api
+        env:
+          DATABASE_URL: sqlite+pysqlite:///:memory:
+        run: |
+          python - <<'PY'
+          import json, sys
+          sys.path.insert(0, ".")
+          from main import app
+
+          spec = app.openapi()
+          paths = set(spec["paths"])
+          required = {
+              "/api/v1/health",
+              "/api/v1/me",
+              "/api/v1/stages",
+              "/api/v1/patients",
+              "/api/v1/patients/{patient_id}",
+              "/api/v1/studies/{study_id}",
+              "/api/v1/studies/{study_id}/runs",
+              "/api/v1/runs/{run_id}",
+              "/api/v1/runs/{run_id}/stages",
+              "/api/v1/runs/{run_id}/cancel",
+              "/api/v1/dashboard/patients",
+          }
+          missing = required - paths
+          if missing:
+              print("BREAKING CHANGE — endpoints removed from /api/v1:")
+              for m in sorted(missing):
+                  print("  ", m)
+              raise SystemExit(1)
+          print(f"OpenAPI OK — {len(paths)} paths, all {len(required)} required present")
+          PY

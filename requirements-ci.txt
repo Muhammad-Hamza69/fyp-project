@@ -1,0 +1,46 @@
+# Dependencies for the CI test suite.
+#
+# Deliberately NOT the worker's full environment: OpenFOAM, VMTK and MONAI are
+# absent because no test needs a solver. Every test builds its fields
+# analytically or parses a synthetic solver log, which is what lets the suite
+# run in seconds on a CI runner instead of requiring a 3 GB CFD install.
+#
+# Deployment dependencies for the serverless API live in requirements.txt;
+# the worker's full stack is created per docs/migration-plan.md Phase 0.5.
+
+# core numerics
+numpy>=2.1,<3
+scipy
+pandas
+
+# geometry / meshing analysis (hemodynamic engine, model prep, mesh export)
+vtk
+pyvista
+trimesh
+
+# medical imaging (DICOM validation, QA, segmentation, phantom)
+pydicom
+SimpleITK
+itk
+scikit-image
+opencv-python-headless
+
+# risk model
+scikit-learn
+lightgbm
+
+# API
+fastapi
+pydantic
+pydantic-settings
+sqlalchemy
+psycopg[binary]
+pyjwt[crypto]
+python-dotenv
+httpx
+
+# plots for the clinical report
+matplotlib
+
+# test runner
+pytest
