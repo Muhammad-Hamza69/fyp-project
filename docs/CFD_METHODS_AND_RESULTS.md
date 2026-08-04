@@ -213,11 +213,14 @@ The available hardware (6 physical cores, 16 GB RAM, 4 GB GPU) permits roughly o
 | Vessel surface generation (SDF + marching cubes) | **Real** |
 | Volume meshing (snappyHexMesh) + quality verification | **Real** |
 | Navier–Stokes solution (OpenFOAM) | **Real** |
-| WSS → TAWSS / OSI / RRT / ECAP / LSAR / NWSS | **Real** |
+| WSS → TAWSS / RRT / LSAR / NWSS | **Real** |
+| OSI and ECAP | **Real for the pulsatile case** (§6.1). Undefined on a steady solve, and shown as `n/a` rather than 0.00 |
 | Morphology measured from the surface | **Real** |
-| Composite Risk Index and PHASES score | **Real** (always were) |
+| Composite Risk Index and PHASES score | **Real** (always were). Flagged as a **lower bound** where OSI is uncomputed, since OSI holds 30 % of the weighting |
 | DICOM header parsing (`pydicom`) | **Real** |
-| 2D heatmap, 3D viewer, report generation | **Real** rendering of the above |
+| 2D heatmap, report generation | **Real** rendering of the above |
+| 3D viewer — the **aneurysm sac** | **Real**: positioned at the case's recorded site, sized at true anatomical scale from measured morphology (dome, neck, aspect ratio), coloured by the computed field |
+| 3D viewer — the **vessel network around it** | **Generic anatomical asset.** Identical for every patient, not derived from any scan, shown for orientation. The panel states this on screen |
 | Aneurysm **anatomy** | **Idealised** — parametric, not patient-derived |
 | Automatic vessel segmentation | **Not implemented** |
 | AI / ML rupture prediction | **Not implemented** |
@@ -250,6 +253,32 @@ Measured morphology: maximum diameter 8.00 mm, neck 6.87 mm, aspect ratio 0.89, 
 Clinical criteria triggered: **low TAWSS** (0.236 < 0.4 Pa) and **elevated RRT** (11.04 > 3.0 Pa⁻¹).
 
 OSI is identically zero in the steady solution — correct, not a defect: oscillatory shear requires a time-varying flow. Meaningful OSI comes only from the pulsatile solution.
+
+### 6.1 Oscillatory shear from the pulsatile solve
+
+A steady solve cannot produce OSI. The definition
+
+```
+OSI = ½ (1 − |mean(τ⃗)| / mean(|τ⃗|))
+```
+
+compares two averages of the same field; with a single flow state they are identical and OSI is exactly 0 **by construction**. ECAP = OSI / TAWSS inherits this. Those zeros are *not measurements of "no oscillation"* and the dashboard no longer displays them as numbers — the gauges read `n/a` with the reason, and because OSI carries 30 % of the Composite Risk Index weighting, a steady case's index is labelled a **lower bound** rather than silently forfeiting 30 % of its score to an unevaluated term.
+
+The pulsatile case (`pimpleFoam`, tabulated ICA waveform, T = 0.9 s) was warm-started from the converged steady field and averaged over t = 0.22–0.808 s — 65 % of the cycle, spanning systolic deceleration through mid-diastole, which is the window in which reversal occurs.
+
+| patch | area (mm²) | TAWSS (Pa) | OSI | ECAP |
+|---|---|---|---|---|
+| `wall` (parent artery) | 1233.1 | 2.663 | 0.0002 | 0.0001 |
+| `wall_aneurysm` (sac) | 172.5 | 0.233 | **0.0096** | **0.0414** |
+
+All values are **area-weighted patch means**, not point samples. The parent artery carries high unidirectional shear with essentially no reversal; the sac has 11× lower shear with 48× the OSI and 414× the ECAP. That is the expected signature of recirculation in a sidewall aneurysm, and it is the project's first genuinely computed OSI.
+
+Stated plainly, because it matters for interpretation: **0.0096 is small**. It sits below the 0.2 clinical alert threshold and below the 0.03 floor of the risk normalisation, so a real OSI barely moves the Composite Risk Index for this geometry. Its value is that the quantity is now measured rather than assumed — which is precisely what the lower-bound framing predicted. A sac with stronger recirculation (higher aspect ratio, narrower neck) would be expected to produce substantially more.
+
+Two honest limitations on this number:
+
+- **One cycle, warm-started.** Convention is to average over the last of two or three cycles. A warm start removes most of the start-up transient, but a single cycle remains the weaker choice and cycle-to-cycle variation is unquantified here.
+- **The window stops at 0.808 s, not 0.90 s.** Late diastole is excluded. Flow there is slow and near-steady, so its contribution to reversal is small, but it is not zero.
 
 ---
 
