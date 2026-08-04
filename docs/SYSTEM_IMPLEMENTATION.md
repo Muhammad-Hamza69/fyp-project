@@ -103,13 +103,44 @@ Noise is **Rician**, not Gaussian, because MRI magnitude images are Rician-distr
 
 > **Verified:** 50 slices, 280×54, isotropic 0.4 mm, 22,307 ground-truth vessel voxels; series reads back cleanly through `pydicom` and SimpleITK.
 
-### 2.8 Morphology — `export_patient.measure_sac`
+### 2.8 Hemodynamic engine — `hemodynamic_engine.py`
+
+The analysis core. Derives the full biomarker set from the solved velocity, pressure and wall-shear-stress fields.
+
+**Why not just TAWSS and OSI.** Those are the two most-cited parameters, but between them they describe only shear *magnitude* and *reversal*. They say nothing about how the inflow jet is organised (ICI), how much energy the sac retains (KER), how concentrated the shear is (SCI), or how the shear field varies across the wall (WSSG). The rupture-risk literature — Xiang 2011, Cebral 2011, Meng 2014, Byrne 2014 — uses these jointly. A system that spends hours solving a flow field and then reports two numbers from it is under-describing its own result.
+
+| Wall parameters | | Volumetric / regime | |
+|---|---|---|---|
+| WSS | instantaneous magnitude, Pa | ICI | inflow concentration |
+| TAWSS | mean(\|τ\|) over the cycle | KER | kinetic energy ratio |
+| OSI | directional reversal, 0–0.5 | VDR | viscous dissipation ratio |
+| RRT | 1/((1−2·OSI)·TAWSS) | PLc | pressure loss coefficient |
+| ECAP | OSI/TAWSS | VO | vortex-core fraction (Q-criterion) |
+| transWSS | cross-flow shear component | Re | Reynolds number |
+| WSSG | spatial gradient, Pa/mm | Wo | Womersley number |
+| AFI, GON | directional alignment / oscillation | | |
+| LSA, HSA, SCI, NWSS | area fractions and ratios | | |
+
+> **Verified against independent analytics** — these are not self-consistency checks:
+>
+> | | Computed | Independent |
+> |---|---|---|
+> | Reynolds | 403.5 | U·D/ν = **380** |
+> | Womersley | 3.08 | r√(ω/ν) = **2.9** |
+>
+> Physical coherence: KER **0.054** and VDR **0.089** — the sac retains ~5% of the parent artery's kinetic energy and dissipates ~9% of its viscous energy, exactly what the 12.6× shear reduction implies. Three independent quantities agreeing on "the flow stagnates in the sac" is a stronger statement than any one of them alone.
+
+**A silent-failure bug worth recording.** VDR initially read as exactly `0.0`. snappyHexMesh leaves a small number of near-degenerate cells where VTK's velocity gradient is `NaN`; the NaN propagated into the dissipation sum, and because `NaN > 0` evaluates `False`, the divide-by-zero guard returned a *plausible-looking zero* rather than raising. Non-finite gradients are now masked and counted in the output. This is the same class of failure as the kinematic-units trap: a wrong number that looks reasonable is far more dangerous than a crash.
+
+`transWSS`, `AFI` and `GON` are identically zero in a steady solution. That is the correct answer, not a defect — all three measure temporal variation, and a steady flow has none.
+
+### 2.9 Morphology — `export_patient.measure_sac`
 
 Volume, surface area, max diameter, neck diameter, dome height, aspect ratio, dome-to-neck, non-sphericity index — all measured from the reconstructed surface. The sac patch is an open cap, so its boundary edge *is* the ostium, which yields the neck diameter directly.
 
 > **Verified:** measured max diameter **8.00 mm** against a sphere built with a 4.0 mm radius. Measurement is independent of the construction parameters, so agreement is a genuine test.
 
-### 2.9 AI risk assessment — `risk_model.py`
+### 2.10 AI risk assessment — `risk_model.py`
 
 Three separable stages: feature extraction (deterministic, cacheable) → prediction (a versioned model artefact) → composite fusion (the transparent formula).
 
@@ -121,7 +152,7 @@ SHAP uses LightGBM's exact tree attribution — no sampling approximation, no ex
 >
 > **The model is ILLUSTRATIVE, not clinically validated.** No labelled patient cohort was available (AneuriskWeb, which carried rupture status, is offline — HTTP 404). It is trained on a synthetic cohort generated from published relationships (PHASES; Xiang 2011; Meng 2014), with irreducible noise added so the label is not a deterministic function of the features — otherwise the model would simply invert its own generating formula and report a meaningless AUC near 1.0. **AUC 0.62 is a modest number reported honestly.**
 
-### 2.10 Clinical report — `report.py`
+### 2.11 Clinical report — `report.py`
 
 Two-page A4 PDF: risk headline, weighted contribution breakdown, hemodynamics table with threshold flags, measured morphology, provenance block, per-zone shear chart, SHAP attribution chart, and the narrative assessment.
 
@@ -129,7 +160,7 @@ Rendered with matplotlib's PDF backend rather than WeasyPrint — the valuable c
 
 > **Verified:** [sample-clinical-report.pdf](sample-clinical-report.pdf) — 2 pages, 67 KB, valid PDF-1.4, generated from the real CFD record.
 
-### 2.11 Job queue — `tasks.py`
+### 2.12 Job queue — `tasks.py`
 
 Celery on Redis. Queues are split by resource profile so a 3-hour solve cannot block a 2-second metadata extraction: `cpu` (2), `cfd` (**solo**), `ai` (2), `reports` (2).
 
@@ -142,7 +173,7 @@ Two decisions that matter more than they look:
 
 > **Verified end-to-end:** worker consumed from Redis → `ingest_study` validated the real DICOM series (50 slices, quality 0.751) → `predict_risk` returned p=0.361 (Moderate) → stage rows written to Neon and read back through `GET /api/v1/runs/{id}/stages`.
 
-### 2.12 Shared risk library — `packages/shared`
+### 2.13 Shared risk library — `packages/shared`
 
 The composite index, PHASES score, RRT, ECAP and colour normalisation, ported verbatim from the original `app.js` into typed TypeScript, mirrored in Python so client and server cannot disagree.
 
@@ -170,9 +201,10 @@ Stated so it is disclosed rather than discovered:
 | Component | Status |
 |---|---|
 | React / Vite frontend rewrite | **Not done.** The dashboard remains the original vanilla-JS application, now fed by real data. A cosmetic rewrite would have risked a working demo for no functional gain. |
-| Clerk authentication | **Not wired.** The tenant column exists; no identity provider is connected. |
-| Deployed API / worker | **Local only.** The API and Celery worker run on the development machine; the deployed dashboard uses the static export. |
-| MONAI learned segmentation | **Scaffolded, not trained.** The backend interface exists; no cerebral-vessel model is publicly available and the GPU cannot train one. |
+| Clerk authentication | **Implemented, awaiting keys.** RS256 JWKS verification, tenant isolation and fail-closed behaviour are in `services/api/auth.py`; set `CLERK_PUBLISHABLE_KEY` to enforce. Runs unauthenticated until then so the demo works. |
+| Deployed API | **Live** as a Vercel serverless function at `/api/v1`, same origin as the dashboard, connected to Neon. |
+| Celery worker deployment | **Local by design.** Serverless functions are short-lived and cannot host a 3-hour CFD solve; the worker runs on the OpenFOAM machine and reaches the same database outbound. |
+| MONAI learned segmentation | **Not pursued.** No cerebral-vessel model is publicly available and a 4 GB GPU cannot train one. That effort went into the hemodynamic engine (§2.8) instead — a defensible computation rather than an undertrained model. |
 | Patient-derived geometry | **Not available.** AneuriskWeb returns HTTP 404. Geometry is parametric. |
 | Windkessel outlet, FSI, non-Newtonian run | Configured but not executed. |
 
