@@ -46,6 +46,12 @@ boundaryField
     {
         type            zeroGradient;
     }
+    // See the note in 0/U: catch-all for empty leftover patches so a
+    // missing entry cannot abort the run with an unrelated error.
+    ".*"
+    {
+        type            zeroGradient;
+    }
 }
 
 // ************************************************************************* //

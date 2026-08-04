@@ -65,6 +65,16 @@ boundaryField
     {
         type            noSlip;
     }
+    // Fallback for any patch snappyHexMesh leaves behind (typically an
+    // empty `background` patch from the blockMesh domain when the geometry
+    // does not span it). OpenFOAM requires a boundaryField entry for EVERY
+    // patch, even one with zero faces, and omitting it aborts decomposePar
+    // with a confusing "cannot find processorN/0/p" further downstream.
+    // Named patches above take precedence; this only catches leftovers.
+    ".*"
+    {
+        type            zeroGradient;
+    }
 }
 
 // ************************************************************************* //
