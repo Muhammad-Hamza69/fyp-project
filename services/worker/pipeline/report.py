@@ -66,9 +66,19 @@ def _page_summary(pdf: PdfPages, rec: dict[str, Any]) -> None:
     ax.text(0.5, 0.18, tier, ha="center", fontsize=13, fontweight="bold",
             color=_tier_colour(tier), transform=ax.transAxes)
 
+    # The caveat belongs with the number it qualifies. OSI carries 30% of the
+    # weighting, so a steady solve forfeits that share to a term nobody
+    # evaluated and the headline score is a floor, not an estimate. Printing 49
+    # unqualified invites it to be read as complete.
+    if not rec.get("hemodynamics", {}).get("transient", True):
+        ax.text(0.5, 0.04,
+                "Lower bound — OSI (30%) not computed on this steady solve",
+                ha="center", fontsize=6.5, color=C_MUTED, transform=ax.transAxes)
+
     # --- risk decomposition -------------------------------------------------
     ax = fig.add_axes([0.54, 0.70, 0.40, 0.17])
     b = rec.get("riskBreakdown", {})
+    _transient = rec.get("hemodynamics", {}).get("transient", True)
     labels = ["TAWSS\n(35%)", "OSI\n(30%)", "Diameter\n(20%)", "Aspect\n(15%)"]
     vals = [b.get("tawssScore", 0), b.get("osiScore", 0),
             b.get("diameterScore", 0), b.get("aspectScore", 0)]
@@ -76,9 +86,13 @@ def _page_summary(pdf: PdfPages, rec: dict[str, Any]) -> None:
     ax.set_xlim(0, 100); ax.set_xlabel("sub-score", fontsize=8)
     ax.tick_params(labelsize=7.5)
     ax.set_title("Risk contribution", fontsize=9, color=C_TEXT, pad=6)
-    for bar, v in zip(bars, vals):
-        ax.text(min(v + 2, 92), bar.get_y() + bar.get_height() / 2, f"{v:.0f}",
-                va="center", fontsize=7, color=C_TEXT)
+    for i, (bar, v) in enumerate(zip(bars, vals)):
+        # An empty OSI bar labelled "0" looks like a measured absence of
+        # oscillatory shear rather than a term that was never evaluated.
+        txt = "n/a" if (i == 1 and not _transient) else f"{v:.0f}"
+        ax.text(min(v + 2, 92), bar.get_y() + bar.get_height() / 2, txt,
+                va="center", fontsize=7,
+                color=C_MUTED if txt == "n/a" else C_TEXT)
     for s in ("top", "right"): ax.spines[s].set_visible(False)
 
     # --- hemodynamics table -------------------------------------------------
@@ -89,16 +103,28 @@ def _page_summary(pdf: PdfPages, rec: dict[str, Any]) -> None:
     dome = zones.get("Aneurysm Dome", {})
     parent = zones.get("Parent Artery Inlet", {})
 
+    # OSI and ECAP exist only for a transient solve. On a steady one they are
+    # zero by construction — the definition compares two averages of the same
+    # field, and with a single flow state those are identical. Printing "0.000"
+    # in a PDF is worse than on screen: the report is the artifact most likely
+    # to be read on its own, where 0.000 alongside a "> 0.2" threshold reads
+    # unambiguously as a measured pass.
+    transient = h.get("transient", True)
+    osi_val = f"{dome.get('osi', 0):.3f}" if transient else "not computed"
+    ecap_val = f"{h.get('ecap', 0):.3f} Pa⁻¹" if transient else "not computed"
+    cycle_thr = "> 0.2" if transient else "steady solve"
+    ecap_thr = "> 1.0" if transient else "steady solve"
+
     rows = [
         ("TAWSS — aneurysm dome", f"{dome.get('tawss', 0):.3f} Pa", "< 0.4 Pa",
          dome.get("tawss", 1) < THRESHOLDS["TAWSS_LOW_PA"]),
         ("TAWSS — parent artery", f"{parent.get('tawss', 0):.3f} Pa", "reference", False),
-        ("OSI — aneurysm dome", f"{dome.get('osi', 0):.3f}", "> 0.2",
-         dome.get("osi", 0) > THRESHOLDS["OSI_HIGH"]),
+        ("OSI — aneurysm dome", osi_val, cycle_thr,
+         transient and dome.get("osi", 0) > THRESHOLDS["OSI_HIGH"]),
         ("RRT — aneurysm dome", f"{h.get('rrt', 0):.2f} Pa⁻¹", "> 3.0",
          h.get("rrt", 0) > THRESHOLDS["RRT_HIGH"]),
-        ("ECAP — aneurysm dome", f"{h.get('ecap', 0):.3f} Pa⁻¹", "> 1.0",
-         h.get("ecap", 0) > THRESHOLDS["ECAP_HIGH"]),
+        ("ECAP — aneurysm dome", ecap_val, ecap_thr,
+         transient and h.get("ecap", 0) > THRESHOLDS["ECAP_HIGH"]),
         ("NWSS (sac / parent)", f"{h.get('nwss', 0):.3f}", "—", False),
         ("LSAR (relative, <10% parent)", f"{h.get('lsarRelative', 0)*100:.1f} %", "—", False),
         ("LSAR (absolute, <0.4 Pa)", f"{h.get('lsarAbsolute', 0)*100:.1f} %", "—", False),
@@ -110,11 +136,25 @@ def _page_summary(pdf: PdfPages, rec: dict[str, Any]) -> None:
     ax.text(0.86, y, "Status", fontsize=7.5, fontweight="bold", color=C_MUTED)
     y -= 0.06
     for label, val, thr, flagged in rows:
+        # A row with no value has no status. Printing "normal" against
+        # "not computed" is the same error as printing 0.000 — it turns an
+        # absent measurement into a passing one, in the column a reader scans
+        # first.
+        computed = val != "not computed"
+        if not computed:
+            status, status_colour, status_weight = "—", C_MUTED, "normal"
+        elif flagged:
+            status, status_colour, status_weight = "FLAGGED", C_HIGH, "bold"
+        else:
+            status, status_colour, status_weight = "normal", C_LOW, "normal"
+
         ax.text(0.00, y, label, fontsize=8, color=C_TEXT)
-        ax.text(0.46, y, val, fontsize=8, color=C_TEXT, fontweight="bold")
+        ax.text(0.46, y, val, fontsize=8,
+                color=C_TEXT if computed else C_MUTED,
+                fontweight="bold" if computed else "normal")
         ax.text(0.66, y, thr, fontsize=7.5, color=C_MUTED)
-        ax.text(0.86, y, "FLAGGED" if flagged else "normal", fontsize=7.5,
-                color=C_HIGH if flagged else C_LOW, fontweight="bold" if flagged else "normal")
+        ax.text(0.86, y, status, fontsize=7.5,
+                color=status_colour, fontweight=status_weight)
         y -= 0.098
 
     # --- morphology ---------------------------------------------------------
