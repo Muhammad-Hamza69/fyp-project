@@ -209,7 +209,7 @@ function buildSac(patient, mode) {
     // Aim at the sac, not the anatomical site: the sac sits outboard of the
     // site by its own half-height, so targeting the site would frame each case
     // differently depending on how tall its dome is.
-    focusOn(sacMesh.position.clone());
+    focusOn(sacMesh.position.clone(), OUT);
 
     // Publish the numbers the sac was built from. Stating them beside the
     // render is what lets a viewer check the picture against the data rather
@@ -257,15 +257,25 @@ function disposeSac() {
  * make every aneurysm fill the same fraction of the screen and silently cancel
  * the size difference between cases — the one thing this view exists to show.
  */
-function focusOn(centre) {
+function focusOn(centre, outward) {
     if (!controls || !camera) return;
-    const dist = VIEW_DISTANCE;
-    const dirOut = centre.clone().normalize();
-    // Offset slightly above the outward axis so the sac is seen against the
-    // network rather than end-on.
-    const eye = centre.clone().add(
-        dirOut.multiplyScalar(dist)).add(new THREE.Vector3(0, 0.12 * dist, 0));
-    camera.position.copy(eye);
+
+    // Deliberately NOT along `outward`. The sac is elongated along that axis by
+    // its aspect ratio, so looking down it foreshortens the elongation to zero
+    // and a tall 12.35 mm dome renders indistinguishable from a squat one —
+    // hiding one of the four components of the risk score. Viewing mostly
+    // side-on shows the dome in profile so its height is legible.
+    const out = outward.clone().normalize();
+    let up = new THREE.Vector3(0, 0, 1);
+    if (Math.abs(out.dot(up)) > 0.9) up.set(1, 0, 0);
+    const perp = new THREE.Vector3().crossVectors(out, up).normalize();
+
+    // ~30 degrees off pure side-on: enough obliquity to read as 3D, little
+    // enough that the dome's height still projects at ~87% of its true length.
+    const dir = perp.multiplyScalar(Math.cos(Math.PI / 6))
+        .add(out.multiplyScalar(Math.sin(Math.PI / 6))).normalize();
+
+    camera.position.copy(centre).addScaledVector(dir, VIEW_DISTANCE);
     controls.target.copy(centre);
     controls.update();
 }

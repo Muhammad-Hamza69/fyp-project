@@ -13,8 +13,23 @@ Two jobs:
 
 The mirroring is deliberate and load-bearing: if these two drift apart, the
 fallback stops showing what the interactive view shows. The constants and the
-displacement formula below must stay in step with `applyBulge` in neuro3d.js.
-The same discipline already applies to risk.ts / composite.py.
+sac construction below must stay in step with `buildSac` in neuro3d.js; a test
+asserts the shared constants against the JS source directly.
+
+REGENERATING
+  # the three solved cases
+  python render_brain.py
+  # the three demonstration cases, whose data lives in app.js rather than in a
+  # JSON file — extract it first:
+  node -e "const fs=require('fs'),s=fs.readFileSync('app.js','utf8'),
+    a=s.indexOf('const patientDatabase = {'),o=s.indexOf('{',a);
+    let d=0,i=o; for(;i<s.length;i++){if(s[i]=='{')d++;else if(s[i]=='}'){d--;if(!d){i++;break}}}
+    fs.writeFileSync('.demo-patients.json',JSON.stringify(
+      {patients:Object.values(eval('('+s.slice(o,i)+')'))},null,1))"
+  python render_brain.py --patients ../../../.demo-patients.json
+
+Every case needs an image: a browser with hardware acceleration disabled shows
+the fallback for ALL of them, not just the computed ones.
 """
 
 from __future__ import annotations
@@ -100,6 +115,33 @@ def sac_params(meta: dict[str, Any], patient: dict[str, Any], mode: str) -> dict
     }
 
 
+def _view_offset(outward: np.ndarray) -> np.ndarray:
+    """
+    Camera offset from the sac centre. Mirrors focusOn() in neuro3d.js.
+
+    Deliberately NOT along `outward`. The sac is elongated along that axis by
+    its aspect ratio, so looking down it foreshortens the elongation to zero
+    and a tall 12.35 mm dome renders indistinguishable from a squat one —
+    hiding one of the four components of the risk score. Viewing mostly
+    side-on, with a slight tilt toward the outward side, shows the dome in
+    profile so its height is legible.
+    """
+    out = outward / (np.linalg.norm(outward) or 1.0)
+
+    # Any unit vector perpendicular to `out`. Cross with world up unless `out`
+    # is nearly parallel to it, in which case use X instead.
+    up = np.array([0.0, 0.0, 1.0])
+    if abs(float(np.dot(out, up))) > 0.9:
+        up = np.array([1.0, 0.0, 0.0])
+    perp = np.cross(out, up)
+    perp = perp / (np.linalg.norm(perp) or 1.0)
+
+    # ~30 degrees off pure side-on: enough obliquity to read as 3D, little
+    # enough that the dome's height still projects at ~87% of its true length.
+    direction = perp * np.cos(np.pi / 6) + out * np.sin(np.pi / 6)
+    return direction / (np.linalg.norm(direction) or 1.0) * VIEW_DISTANCE
+
+
 def _align_z_to(points: np.ndarray, target: np.ndarray) -> np.ndarray:
     """
     Rotate points so the local +Z axis lands on `target`.
@@ -168,10 +210,8 @@ def render(
     # of the site, so targeting the site leaves it off-centre by an amount that
     # varies with its own height — different framing for every case.
     C = np.asarray(info["centre"], dtype=float)
-    dist = VIEW_DISTANCE
-    d = C / (np.linalg.norm(C) or 1.0)
     pl.camera.focal_point = tuple(C)
-    pl.camera.position = tuple(C + d * dist + np.array([0.0, 0.12 * dist, 0.0]))
+    pl.camera.position = tuple(C + _view_offset(np.asarray(info["outward"], dtype=float)))
     pl.camera.up = (0.0, 0.0, 1.0)
 
     out_png.parent.mkdir(parents=True, exist_ok=True)
