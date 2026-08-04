@@ -25,9 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version:` here on purpose. package.json already declares
+      # "packageManager": "pnpm@9.15.9", and pnpm/action-setup refuses when a
+      # version is specified in both places. Letting package.json be the single
+      # source of truth also means CI uses exactly the pnpm the repo pins.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
