@@ -1980,18 +1980,6 @@ body {
     }
 }
 
-border: 1px solid #000000 !important;
--webkit-print-color-adjust: exact;
-print-color-adjust: exact;
-}
-
-/* Avoid splits in critical components */
-.report-section,
-.report-layout-columns,
-.report-footer-signatures {
-    page-break-inside: avoid;
-}
-}
 /* ---------- Data provenance badges ----------
    Distinguishes cases whose hemodynamics were COMPUTED by the OpenFOAM
    pipeline from the curated demonstration dataset. */
@@ -2021,3 +2009,95 @@ print-color-adjust: exact;
 .color-high-risk { color: var(--color-high-risk); }
 .color-mod-risk  { color: var(--color-mod-risk); }
 .color-low-risk  { color: var(--color-low-risk); }
+
+/* =========================================================================
+   RESPONSIVE LAYOUT
+   =========================================================================
+   The dashboard grid was hard-locked at `280px 1fr 340px`, which needs
+   ~1300px of width before the centre column has room for the 650px canvas.
+   Below that the workspace was crushed and the page scrolled horizontally.
+
+   A viva or demo happens on whatever hardware is in the room — a projector at
+   1280x720, a borrowed laptop, a tablet — so a layout that only works on the
+   development machine is a real risk, not a cosmetic one.
+
+   Breakpoints are chosen by where the CONTENT breaks, not at device sizes:
+     1400px  telemetry column no longer fits beside a full-width canvas
+     1100px  sidebar + workspace no longer fit side by side
+      760px  single column throughout
+   ====================================================================== */
+
+@media (max-width: 1400px) {
+    .dashboard-grid {
+        /* Telemetry drops below the workspace and runs as a horizontal strip,
+           keeping the gauges visible without starving the canvas. */
+        grid-template-columns: 250px 1fr;
+        grid-template-areas:
+            "sidebar workspace"
+            "sidebar telemetry";
+    }
+    .sidebar-panel   { grid-area: sidebar; }
+    .workspace-panel { grid-area: workspace; }
+    .metrics-panel {
+        grid-area: telemetry;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
+        align-content: start;
+    }
+}
+
+@media (max-width: 1100px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "workspace"
+            "sidebar"
+            "telemetry";
+    }
+    /* Patient list becomes a horizontal scroller so it costs one row, not a
+       full column, and the workspace keeps the vertical space. */
+    .patient-list {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+        -webkit-overflow-scrolling: touch;
+    }
+    .patient-card { min-width: 210px; flex: 0 0 auto; }
+    .upload-box-sidebar { margin-top: 12px; }
+}
+
+@media (max-width: 760px) {
+    .main-header {
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 14px;
+    }
+    .patient-banner { order: 3; width: 100%; }
+    .panel-header-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .toggle-control-group { width: 100%; }
+    .toggle-btn { flex: 1; }
+    .metrics-panel { grid-template-columns: 1fr; }
+    .modal-content { width: 96vw; max-height: 92vh; }
+}
+
+/* The 2D heatmap canvas has a fixed 650x420 backing store. Scaling it with CSS
+   keeps the drawing code and its hit-testing coordinates untouched while the
+   element itself becomes fluid — rewriting the canvas to be resolution-
+   independent would mean re-deriving every hover hotspot. */
+#heatmap-canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Wide content must scroll inside its own container rather than forcing the
+   page to scroll sideways. */
+.report-table-wrap,
+.terminal-output {
+    overflow-x: auto;
+}

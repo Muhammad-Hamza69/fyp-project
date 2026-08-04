@@ -8,6 +8,7 @@ X-API-Version header so a client can detect drift.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from datetime import datetime, timezone
@@ -16,7 +17,10 @@ from typing import Any, Literal
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import (
+    Depends, FastAPI, HTTPException, Query, Request, WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -420,6 +424,71 @@ def dashboard_feed(s: Session = Depends(db)) -> dict:
             },
         })
     return {"generatedAt": datetime.now(timezone.utc).isoformat(), "patients": patients}
+
+
+# --------------------------------------------------------------------------- #
+# Real-time job tracking
+# --------------------------------------------------------------------------- #
+
+@app.websocket("/api/v1/ws/runs/{run_id}")
+async def ws_run(websocket: WebSocket, run_id: str) -> None:
+    """
+    Stream stage progress for a run.
+
+    The stream is a VIEW OVER THE DATABASE, not a separate event bus. Each tick
+    re-reads `job_stages` and emits only what changed. That choice matters more
+    than it looks: a CFD solve runs for hours and outlives many browser
+    sessions, so a client connecting late — or reconnecting after a laptop
+    sleep — must receive the true current state rather than an empty log
+    because it missed the broadcasts. Durable-first also means the same
+    information is available over plain HTTP at /runs/{id}/stages for any
+    client that cannot hold a socket open.
+
+    Emits a snapshot immediately on connect, then deltas, then closes when the
+    run reaches a terminal state.
+    """
+    await websocket.accept()
+    session = get_session()
+    last: dict[str, tuple[str, float]] = {}
+    try:
+        while True:
+            run = session.get(Run, run_id)
+            if run is None:
+                await websocket.send_json({"t": "error", "message": "run not found"})
+                return
+            session.refresh(run)
+
+            for stage in sorted(run.stages, key=lambda x: list(JobState).index(x.stage)):
+                key = stage.stage.value
+                cur = (stage.state, round(stage.progress, 4))
+                if last.get(key) != cur:
+                    last[key] = cur
+                    await websocket.send_json({
+                        "t": "stage",
+                        "stage": key,
+                        "state": stage.state,
+                        "progress": stage.progress,
+                        "message": stage.message,
+                        "metrics": stage.metrics,
+                    })
+
+            if run.state in (JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED):
+                await websocket.send_json({
+                    "t": "done", "state": run.state.value, "error": run.error,
+                })
+                return
+
+            await websocket.send_json({"t": "heartbeat", "state": run.state.value})
+            await asyncio.sleep(2.0)
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        try:
+            await websocket.send_json({"t": "error", "message": str(exc)})
+        except Exception:
+            pass
+    finally:
+        session.close()
 
 
 @app.exception_handler(Exception)
