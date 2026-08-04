@@ -1,0 +1,44 @@
+# --- credentials / local tool state (NEVER commit) ---
+.env
+.env.*
+!.env.example
+.vercel
+.wrangler/
+.supabase/
+*.pem
+*.key
+
+# --- node / js ---
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- data & compute artifacts (large; object storage or local only) ---
+data/
+cases/
+*.foam
+*.vtu
+*.vtp
+*.stl
+*.obj
+*.nii
+*.nii.gz
+
+# --- vm / archive images ---
+*.vhdx
+*.tar
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db

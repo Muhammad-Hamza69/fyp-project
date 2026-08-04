@@ -1,0 +1,29 @@
+# Static dashboard deploy: ship only what the browser needs.
+# NOTE: real-cfd-patients.json MUST ship — app.js fetches it at runtime for the
+# computed CFD cases. Do not add *.json here.
+
+# source / tooling that never reaches the browser
+neuroflow-local-pipeline
+services
+packages
+infra
+node_modules
+.venv
+__pycache__
+pnpm-lock.yaml
+pnpm-workspace.yaml
+package.json
+
+# documents
+docs
+*.dcm
+*.pdf
+*.docx
+*.md
+python-script.txt
+
+# local state
+.wrangler
+.supabase
+.env
+.env.*

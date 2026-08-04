@@ -1,0 +1,98 @@
+{
+  "generatedAt": "2026-08-04T13:54:26",
+  "pipeline": "NeuroFlow CFD worker \u2014 geometry -> snappyHexMesh -> OpenFOAM -> hemodynamics",
+  "patients": [
+    {
+      "id": "PT-2026-0101",
+      "morphology": {
+        "maxDiameter": 8.0,
+        "aspectRatio": 0.89,
+        "volumeMm3": 241.4,
+        "surfaceAreaMm2": 175.9,
+        "neckDiameterMm": 6.87,
+        "domeToNeck": 1.16,
+        "nonSphericityIndex": 0.154
+      },
+      "demographics": {
+        "age": 64,
+        "hypertension": true,
+        "earlierSAH": false,
+        "population": "Other",
+        "site": "MCA"
+      },
+      "zones": [
+        {
+          "name": "Parent Artery Inlet",
+          "id": "3891",
+          "x": 160,
+          "y": 278,
+          "radius": 55,
+          "tawss": 2.9686,
+          "osi": 0.0,
+          "isAneurysm": false
+        },
+        {
+          "name": "Parent Artery Outlet",
+          "id": "3942",
+          "x": 470,
+          "y": 278,
+          "radius": 55,
+          "tawss": 2.7311,
+          "osi": 0.0,
+          "isAneurysm": false
+        },
+        {
+          "name": "Aneurysm Neck",
+          "id": "4109",
+          "x": 320,
+          "y": 220,
+          "radius": 35,
+          "tawss": 0.4817,
+          "osi": 0.0,
+          "isAneurysm": true
+        },
+        {
+          "name": "Aneurysm Dome",
+          "id": "4289",
+          "x": 320,
+          "y": 120,
+          "radius": 50,
+          "tawss": 0.2361,
+          "osi": 0.0,
+          "isAneurysm": true
+        }
+      ],
+      "hemodynamics": {
+        "lsarRelative": 0.8465,
+        "lsarAbsolute": 0.8816,
+        "nwss": 0.0795,
+        "rrt": 11.039,
+        "ecap": 0.0,
+        "wssMaxPa": 49.755,
+        "wssMinPa": 0.0034
+      },
+      "riskBreakdown": {
+        "tawssScore": 93.62494131987243,
+        "osiScore": 0.0,
+        "diameterScore": 74.97867164202034,
+        "aspectScore": 10.535227661778237,
+        "composite": 49
+      },
+      "riskTier": "Moderate",
+      "clinicalAssessment": "Computational fluid dynamics analysis of case PT-2026-0101. Time-averaged wall shear stress at the aneurysm dome measured 0.236 Pa against 2.969 Pa in the parent artery (normalised WSS 0.080), with an oscillatory shear index of 0.000. 84.6% of the sac surface lies below 10% of the parent-artery shear (LSAR). Relative residence time at the dome is 11.04 Pa^-1. Sac morphology measured from the reconstructed surface: maximum diameter 8.00 mm, neck 6.87 mm, aspect ratio 0.89, volume 241.4 mm^3. Composite Risk Index 49/100 (Moderate).",
+      "provenance": {
+        "source": "computed",
+        "solver": "OpenFOAM ESI v2412",
+        "mesher": "snappyHexMesh",
+        "case": "/home/hp/cases/synthetic01_steady",
+        "meshCells": "cells:            522031",
+        "meshNonOrthogonality": "Mesh non-orthogonality Max: 56.273325 average: 6.6851225",
+        "meshSkewness": "Max skewness = 3.1033722 OK.",
+        "convergence": "SIMPLE solution converged in 336 iterations",
+        "bloodDensityKgM3": 1060.0,
+        "kinematicViscosityM2S": 3.302e-06,
+        "note": "WSS converted from OpenFOAM kinematic units (m^2/s^2) to Pascals by multiplying by rho = 1060.0. Validated against the analytic Poiseuille solution tau = 4*mu*Q/(pi*r^3)."
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Discretisation schemes — transient incompressible, laminar.                  |
+| Blood flow in a cerebral aneurysm at Re ~ 200-400 is laminar; no turbulence  |
+| model is used, which is standard for this application.                       |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    // Second-order implicit. First-order Euler would damp the pulsatile
+    // oscillation that OSI exists to measure.
+    default         backward;
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+    grad(p)         Gauss linear;
+    // Cell-limited on U keeps gradients sane on the snappy transition cells
+    // between refinement levels.
+    grad(U)         cellLimited Gauss linear 1;
+}
+
+divSchemes
+{
+    default         none;
+    div(phi,U)      Gauss linearUpwind grad(U);
+    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+}
+
+laplacianSchemes
+{
+    // Non-orthogonal correction sized to the mesh; snappy meshes are not
+    // orthogonal at refinement boundaries.
+    default         Gauss linear corrected;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+wallDist
+{
+    method          meshWave;
+}
+
+// ************************************************************************* //

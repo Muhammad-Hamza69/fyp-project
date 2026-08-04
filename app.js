@@ -315,8 +315,36 @@ const abortSimBtn = document.getElementById("abort-sim-btn");
 const terminalLogOutput = document.getElementById("terminal-log-output");
 const activeStepBadge = document.getElementById("active-step-badge");
 
+// Real CFD cases produced by the OpenFOAM pipeline (services/worker).
+// Written by pipeline/export_patient.py; every hemodynamic and morphological
+// value in that file is computed, not authored.
+//
+// Loaded additively and defensively: if the fetch fails (opened over file://,
+// or the file has not been generated yet) the dashboard silently keeps its
+// demonstration dataset, so the UI can never be broken by a missing solve.
+async function loadRealCfdCases() {
+    try {
+        const res = await fetch("real-cfd-patients.json", { cache: "no-store" });
+        if (!res.ok) return 0;
+        const data = await res.json();
+        const cases = Array.isArray(data.patients) ? data.patients : [];
+        cases.forEach(p => { patientDatabase[p.id] = p; });
+        if (cases.length > 0) {
+            // Make a computed case the landing view — the real numbers are the
+            // point of the project, so they should not be buried below the mocks.
+            activePatient = patientDatabase[cases[0].id];
+        }
+        return cases.length;
+    } catch (err) {
+        console.info("[NeuroFlow] No computed CFD cases available; using demonstration dataset.", err.message);
+        return 0;
+    }
+}
+
 // Initialize Application
-function initApp() {
+async function initApp() {
+    const nReal = await loadRealCfdCases();
+
     renderPatientList();
     loadPatientData(activePatient);
     setupEventListeners();
@@ -324,6 +352,10 @@ function initApp() {
     // Set current date in report
     const today = new Date().toISOString().split('T')[0];
     reportDateGeneratedEl.textContent = today;
+
+    if (nReal > 0) {
+        console.info(`[NeuroFlow] Loaded ${nReal} case(s) computed by OpenFOAM.`);
+    }
 }
 
 // 2. Patient Profile List Renderer
@@ -336,6 +368,15 @@ function renderPatientList() {
 
         const score = computeCompositeRisk(patient);
         const tier = getRiskTier(score);
+
+        // Cases solved by OpenFOAM carry a provenance block; demonstration
+        // cases do not. Labelling this in the UI is deliberate — the difference
+        // between computed and authored data is the central claim of the
+        // project and should not require reading the source to establish.
+        const isComputed = patient.provenance && patient.provenance.source === "computed";
+        const provenanceTag = isComputed
+            ? `<span class="provenance-badge" title="${patient.provenance.solver} — ${patient.provenance.convergence}"><i class="fa-solid fa-square-root-variable"></i> CFD</span>`
+            : `<span class="provenance-badge provenance-demo" title="Curated demonstration dataset — not computed"><i class="fa-solid fa-flask"></i> DEMO</span>`;
 
         card.innerHTML = `
             <div class="card-header">
@@ -350,6 +391,7 @@ function renderPatientList() {
             <div class="patient-card-details">
                 <span>CRI: ${score}/100</span>
                 <span>Dia: ${patient.morphology.maxDiameter}mm</span>
+                ${provenanceTag}
             </div>
         `;
 

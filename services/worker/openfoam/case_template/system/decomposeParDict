@@ -1,0 +1,22 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Domain decomposition for parallel solving.                                   |
+| numberOfSubdomains is set to FOAM_NPROC by the case generator — use PHYSICAL |
+| cores (6 on the i7-8850H), not logical. Hyperthreads slow OpenFOAM down      |
+| because the solver is memory-bandwidth bound, not ALU bound.                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      decomposeParDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+numberOfSubdomains 6;
+
+// scotch needs no manual weighting and handles the long thin vessel geometry
+// better than a simple/hierarchical split along one axis.
+method          scotch;
+
+// ************************************************************************* //

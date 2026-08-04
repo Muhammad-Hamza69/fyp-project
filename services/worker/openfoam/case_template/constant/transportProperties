@@ -1,0 +1,50 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Blood properties.                                                            |
+|                                                                              |
+| FILE NAMING: this is `transportProperties`, not `physicalProperties`.        |
+| OpenFOAM has two forks with divergent dictionary names:                       |
+|   ESI (openfoam.com, v2412 — what we use): transportProperties +             |
+|                                            turbulenceProperties              |
+|   Foundation (openfoam.org, v10+):         physicalProperties +              |
+|                                            momentumTransport                 |
+| Using the Foundation names here gets you a runtime "cannot find file" abort. |
+|                                                                              |
+| Values from neuroflow-local-pipeline/src/config.py:                          |
+|   rho = 1060 kg/m^3,  mu = 0.0035 Pa*s                                        |
+|                                                                              |
+| OpenFOAM's incompressible solvers are KINEMATIC, so what goes in here is      |
+|   nu = mu/rho = 0.0035/1060 = 3.302e-06 m^2/s                                 |
+|                                                                              |
+| Consequence: wallShearStress output is ALSO kinematic (m^2/s^2), not Pa.      |
+| Multiply by rho = 1060 before comparing against the 0.4 Pa threshold.         |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+transportModel  Newtonian;
+
+nu              3.302e-06;
+
+// --- Non-Newtonian alternative -------------------------------------------
+// ESI's BirdCarreau includes the Yasuda 'a' exponent, so it IS Carreau-Yasuda.
+// Swap transportModel to BirdCarreau to run the comparison; a Newtonian vs
+// shear-thinning TAWSS delta on an identical mesh is a genuinely publishable
+// result for the cost of one extra overnight run.
+//
+// transportModel  BirdCarreau;
+// BirdCarreauCoeffs
+// {
+//     nu0     1.457e-05;   // 0.0154 / 1060  — low-shear plateau
+//     nuInf   3.302e-06;   // 0.0035 / 1060  — high-shear plateau
+//     k       3.313;       // relaxation time [s]
+//     n       0.3568;      // power-law index
+//     a       2.0;         // Yasuda exponent
+// }
+
+// ************************************************************************* //

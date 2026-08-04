@@ -1,0 +1,70 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Velocity boundary conditions.                                                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        // flowRateInletVelocity divides the prescribed volumetric flow rate by
+        // the ACTUAL patch area, so it stays correct even though the
+        // marching-cubes inlet cap is not a perfect analytic disc.
+        //
+        // Combined with the 10-diameter inlet extension in the geometry, a flat
+        // (plug) inlet develops into a proper profile before reaching the sac.
+        // That beats hand-rolling a Womersley BC on both effort and
+        // defensibility.
+        type            flowRateInletVelocity;
+        volumetricFlowRate constant 4.6e-06;   // m^3/s = 4.6 mL/s, mean ICA
+        extrapolateProfile false;
+        value           uniform (0 0 0);
+
+        // --- Pulsatile alternative (one cardiac cycle, T = 0.9 s) -----------
+        // Representative ICA waveform (Ford et al. 2005 / Hoi et al. 2010):
+        // mean ~4.6 mL/s, systolic peak ~7.0 mL/s at t~0.15 s.
+        //
+        // type            flowRateInletVelocity;
+        // volumetricFlowRate table
+        // (
+        //     (0.00  4.20e-06) (0.05  5.60e-06) (0.10  6.75e-06)
+        //     (0.15  7.00e-06) (0.20  6.30e-06) (0.25  5.30e-06)
+        //     (0.30  4.60e-06) (0.35  4.20e-06) (0.40  4.05e-06)
+        //     (0.45  4.10e-06) (0.50  4.25e-06) (0.55  4.30e-06)
+        //     (0.60  4.20e-06) (0.65  4.05e-06) (0.70  3.95e-06)
+        //     (0.75  3.90e-06) (0.80  3.95e-06) (0.85  4.05e-06)
+        //     (0.90  4.20e-06)
+        // );
+    }
+
+    outlet
+    {
+        // Zero-gradient velocity paired with fixed pressure. inletOutlet would
+        // guard against backflow, but with a single outlet and a developed
+        // profile it is not needed and adds its own artefacts.
+        type            zeroGradient;
+    }
+
+    wall
+    {
+        type            noSlip;
+    }
+
+    wall_aneurysm
+    {
+        type            noSlip;
+    }
+}
+
+// ************************************************************************* //

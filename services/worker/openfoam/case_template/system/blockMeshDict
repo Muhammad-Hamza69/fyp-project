@@ -1,0 +1,68 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Background hex mesh for snappyHexMesh.                                      |
+| Must fully enclose the vessel STL with margin. Cells should be near-cubic,   |
+| otherwise snappy inherits the anisotropy into the boundary layer and wall    |
+| shear stress accuracy suffers.                                              |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+scale   1;      // metres
+
+// Vessel bounds: x 0..0.100, y -0.002..0.0074, z -0.004..0.004
+// Domain padded so the STL never touches the background boundary.
+xMin -0.003;  xMax 0.103;
+yMin -0.005;  yMax 0.0105;
+zMin -0.007;  zMax 0.007;
+
+// ~0.4 mm base cells: 265 x 39 x 35. Cells outside the surface are carved away
+// by castellation, so the final count tracks vessel volume, not this box.
+nx 265;
+ny 39;
+nz 35;
+
+vertices
+(
+    ($xMin $yMin $zMin)
+    ($xMax $yMin $zMin)
+    ($xMax $yMax $zMin)
+    ($xMin $yMax $zMin)
+    ($xMin $yMin $zMax)
+    ($xMax $yMin $zMax)
+    ($xMax $yMax $zMax)
+    ($xMin $yMax $zMax)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) ($nx $ny $nz) simpleGrading (1 1 1)
+);
+
+edges ();
+
+boundary
+(
+    background
+    {
+        type patch;
+        faces
+        (
+            (0 3 2 1)
+            (4 5 6 7)
+            (0 1 5 4)
+            (3 7 6 2)
+            (0 4 7 3)
+            (1 2 6 5)
+        );
+    }
+);
+
+mergePatchPairs ();
+
+// ************************************************************************* //

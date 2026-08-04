@@ -1,0 +1,34 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Extracts feature edges (vessel.eMesh) so snappy can snap crisply to the      |
+| inlet/outlet rims instead of rounding them off.                              |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      surfaceFeatureExtractDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+vessel.stl
+{
+    extractionMethod    extractFromSurface;
+
+    extractFromSurfaceCoeffs
+    {
+        // 150 deg keeps the sharp cap rims and the sac/parent junction while
+        // ignoring the marching-cubes faceting on the smooth vessel wall.
+        includedAngle   150;
+    }
+
+    subsetFeatures
+    {
+        nonManifoldEdges no;
+        openEdges        yes;
+    }
+
+    writeObj            no;
+}
+
+// ************************************************************************* //

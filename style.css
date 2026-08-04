@@ -1992,3 +1992,32 @@ print-color-adjust: exact;
     page-break-inside: avoid;
 }
 }
+/* ---------- Data provenance badges ----------
+   Distinguishes cases whose hemodynamics were COMPUTED by the OpenFOAM
+   pipeline from the curated demonstration dataset. */
+.provenance-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: rgba(30, 140, 78, 0.12);
+    color: var(--color-low-risk);
+    border: 1px solid rgba(30, 140, 78, 0.35);
+}
+
+.provenance-badge.provenance-demo {
+    background: rgba(100, 116, 139, 0.12);
+    color: var(--text-secondary);
+    border-color: rgba(100, 116, 139, 0.3);
+}
+
+/* These three were emitted as class names by getRiskTier() in app.js but never
+   actually defined, so every risk-coloured label has been rendering in the
+   inherited colour since the project began. */
+.color-high-risk { color: var(--color-high-risk); }
+.color-mod-risk  { color: var(--color-mod-risk); }
+.color-low-risk  { color: var(--color-low-risk); }

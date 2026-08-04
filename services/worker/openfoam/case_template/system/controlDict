@@ -1,0 +1,125 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| NeuroFlow CFD — transient blood flow, incompressible                        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     pimpleFoam;
+
+startFrom       latestTime;
+startTime       0;
+stopAt          endTime;
+
+// One cardiac cycle = 0.9 s (T from the Ford/Hoi ICA waveform).
+// Overridden per-run by the case generator.
+endTime         0.9;
+
+// Adjustable dt driven by maxCo — pimpleFoam can hold larger Courant numbers
+// than a fixed-dt PISO scheme, which is a large part of why icoFoam is unusable
+// here (no rheology hook, no turbulence slot, fixed dt).
+deltaT          1e-5;
+adjustTimeStep  yes;
+maxCo           1.0;
+maxDeltaT       1e-3;
+
+writeControl    adjustableRunTime;
+writeInterval   0.009;          // 100 samples per cycle
+purgeWrite      5;              // volume fields: keep 5. Without this a 1M-cell
+                                // case writes ~80 MB x 100 = 16 GB per run.
+writeFormat     binary;
+writePrecision  8;
+writeCompression off;
+timeFormat      general;
+timePrecision   8;
+runTimeModifiable true;
+
+functions
+{
+    // ---- Wall shear stress ---------------------------------------------
+    // NOTE: incompressible OpenFOAM is KINEMATIC. This writes m^2/s^2, NOT Pa.
+    // Multiply by rho (1060) downstream. Getting this wrong makes every TAWSS
+    // ~1000x too small and fires every clinical alert.
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            (fieldFunctionObjects);
+        patches         (wall wall_aneurysm);
+        writeControl    writeTime;
+        log             false;
+    }
+
+    // magnitude must be computed BEFORE averaging: TAWSS is mean(|tau|),
+    // whereas fieldAverage of the vector gives |mean(tau)| — the OSI numerator.
+    // Both are needed; they are different quantities.
+    magWSS
+    {
+        type            mag;
+        libs            (fieldFunctionObjects);
+        field           wallShearStress;
+        result          magWallShearStress;
+        writeControl    writeTime;
+        log             false;
+    }
+
+    // ---- Cycle-averaged quantities --------------------------------------
+    // timeStart must be the beginning of the LAST cardiac cycle, so the
+    // start-up transient is excluded. Set by the case generator.
+    fieldAverage
+    {
+        type            fieldAverage;
+        libs            (fieldFunctionObjects);
+        writeControl    writeTime;
+        timeStart       0.0;
+        restartOnRestart false;
+        fields
+        (
+            wallShearStress    { mean on; prime2Mean off; base time; }
+            magWallShearStress { mean on; prime2Mean off; base time; }
+        );
+    }
+
+    // ---- Wall-patch-only output ------------------------------------------
+    // Small (~2 MB) versus full volume writes; this is what the hemodynamics
+    // stage reads with PyVista.
+    wallSurfaces
+    {
+        type            surfaces;
+        libs            (sampling);
+        writeControl    writeTime;
+        surfaceFormat   vtk;
+        fields          (wallShearStress magWallShearStress
+                         wallShearStressMean magWallShearStressMean p);
+        surfaces
+        {
+            walls
+            {
+                type        patch;
+                patches     (wall wall_aneurysm);
+                interpolate false;
+            }
+        }
+    }
+
+    // ---- Mass conservation check -----------------------------------------
+    flux
+    {
+        type            surfaceFieldValue;
+        libs            (fieldFunctionObjects);
+        regionType      patch;
+        name            inlet;
+        operation       sum;
+        fields          (phi);
+        writeControl    timeStep;
+        writeInterval   50;
+        log             false;
+        writeFields     false;
+    }
+}
+
+// ************************************************************************* //

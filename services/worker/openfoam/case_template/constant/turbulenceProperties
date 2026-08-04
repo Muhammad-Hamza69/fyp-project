@@ -1,0 +1,20 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| ESI naming: `turbulenceProperties` (Foundation calls it momentumTransport).  |
+|                                                                              |
+| Laminar. Re in the parent artery is ~440 here (U~0.37 m/s, D=4 mm,           |
+| nu=3.3e-6), well below transition — standard for cerebral aneurysm CFD.      |
+| Adding a turbulence model at this Re injects spurious eddy viscosity and     |
+| corrupts the very wall shear stress we are trying to measure.                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+simulationType  laminar;
+
+// ************************************************************************* //

@@ -1,0 +1,168 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| snappyHexMesh — hex-dominant vessel mesh with prism boundary layers.         |
+|                                                                              |
+| Hex-dominant (not tetrahedral) matters here: wall shear stress is a gradient |
+| evaluated at the first cell centre, and hexes aligned with the wall give a   |
+| materially better estimate than tets. addLayers supplies the prism layers    |
+| that make that gradient meaningful at all.                                   |
+|                                                                              |
+| The four named solids in vessel.stl become four OpenFOAM patches directly,   |
+| which is why zone extraction later is a patch query rather than topoSet work.|
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    vessel.stl
+    {
+        type triSurfaceMesh;
+        name vessel;
+        regions
+        {
+            inlet         { name inlet; }
+            outlet        { name outlet; }
+            wall          { name wall; }
+            wall_aneurysm { name wall_aneurysm; }
+        }
+    }
+
+    // Volume-refinement box enclosing the aneurysm sac.
+    // Sac centre (0.048, 0.0034, 0), radius 4 mm -> pad to 5 mm.
+    sacBox
+    {
+        type searchableBox;
+        min (0.043 -0.002 -0.005);
+        max (0.053  0.0085  0.005);
+    }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells   2000000;
+    maxGlobalCells  4000000;
+    minRefinementCells 10;
+    nCellsBetweenLevels 3;
+    maxLoadUnbalance 0.10;
+    resolveFeatureAngle 30;
+    allowFreeStandingZoneFaces true;
+    planarAngle     30;
+
+    features
+    (
+        { file "vessel.eMesh"; level 1; }
+    );
+
+    refinementSurfaces
+    {
+        vessel
+        {
+            level (1 1);
+            regions
+            {
+                inlet         { level (1 1); patchInfo { type patch; } }
+                outlet        { level (1 1); patchInfo { type patch; } }
+                wall          { level (1 2); patchInfo { type wall;  } }
+                // Deliberately IDENTICAL to `wall`.
+                //
+                // First attempt used (2 2) here for extra resolution on the sac.
+                // Result: layer coverage wall=90.4%, wall_aneurysm=0%. snappy
+                // could not extrude prism layers across the refinement jump at
+                // the neck, leaving the one surface where TAWSS/OSI actually
+                // matter with no boundary layer at all -- and checkMesh still
+                // said "Mesh OK", so it would have passed unnoticed.
+                //
+                // Matching levels keeps the neck free of a refinement transition.
+                // Sac resolution is recovered via the refinementRegions box below,
+                // which refines the VOLUME without breaking layer extrusion.
+                wall_aneurysm { level (1 2); patchInfo { type wall;  } }
+            }
+        }
+    }
+
+    // Volume refinement around the sac. This is the safe way to get resolution
+    // where the flow separates: it refines cells INSIDE the region without
+    // introducing a surface-refinement jump that kills layer extrusion.
+    refinementRegions
+    {
+        sacBox
+        {
+            mode    inside;
+            levels  ((1e15 2));
+        }
+    }
+
+    // Must be strictly INSIDE the lumen. On the parent-artery axis, downstream
+    // of the inlet extension and clear of the sac.
+    locationInMesh (0.020 0.0 0.0);
+}
+
+snapControls
+{
+    nSmoothPatch    3;
+    tolerance       2.0;
+    nSolveIter      50;
+    nRelaxIter      5;
+    nFeatureSnapIter 12;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes   true;
+    layers
+    {
+        wall          { nSurfaceLayers 3; }
+        wall_aneurysm { nSurfaceLayers 3; }
+    }
+    expansionRatio      1.2;
+    finalLayerThickness 0.4;
+    // Dropped from 0.05. snappy discards ALL layers on a face whose achieved
+    // thickness falls below minThickness — it is all-or-nothing per face, not a
+    // clamp. On the sac the medial-axis mover cannot reach 0.05 of the local
+    // cell size, so every face was zeroed, producing the 0% coverage while
+    // `wall` (flatter, easier to extrude) still managed 90%.
+    minThickness        0.01;
+
+    nGrow               0;
+    // Reverted to 130. Raising this to 180 was tested and made things WORSE:
+    // `wall` coverage fell 90.4% -> 68.7% because every patch edge then counts
+    // as a feature edge and gets its displacement zeroed.
+    featureAngle        130;
+    slipFeatureAngle    30;
+    nRelaxIter          8;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    // Relaxed from 0.3. The medial axis of a bulbous sac sits close to the
+    // wall, so a strict ratio rejects otherwise valid layers.
+    maxThicknessToMedialRatio 0.6;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    nRelaxedIter        20;
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+
+writeFlags ( );
+
+mergeTolerance 1e-6;
+
+// ************************************************************************* //

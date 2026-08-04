@@ -1,0 +1,51 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Pressure boundary conditions.                                                |
+|                                                                              |
+| NOTE the dimensions: [0 2 -2 0 0 0 0] = m^2/s^2, i.e. KINEMATIC pressure     |
+| (p/rho). This is not Pascals. Multiply by rho = 1060 for physical pressure,  |
+| exactly as with wall shear stress.                                            |
+|                                                                              |
+| Only pressure DIFFERENCES matter in incompressible flow, so pinning the      |
+| outlet at 0 is standard; the physiological ~100 mmHg offset is added         |
+| downstream if an absolute number is ever reported.                            |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      p;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            zeroGradient;
+    }
+
+    outlet
+    {
+        // Traction-free reference. With a resistance/Windkessel outlet this
+        // would become a codedMixed BC -- listed as stretch in the plan.
+        type            fixedValue;
+        value           uniform 0;
+    }
+
+    wall
+    {
+        type            zeroGradient;
+    }
+
+    wall_aneurysm
+    {
+        type            zeroGradient;
+    }
+}
+
+// ************************************************************************* //
