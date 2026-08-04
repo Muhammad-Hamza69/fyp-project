@@ -77,7 +77,9 @@ jobs:
       - name: API tests
         working-directory: services/api
         env:
-          DATABASE_URL: sqlite+pysqlite:///:memory:
+          # Quoted: the value ends in a colon, which YAML would otherwise read as
+          # the start of a nested mapping ("mapping values are not allowed here").
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
         run: python -m pytest tests/ -q -p no:warnings
 
   api-contract:
@@ -103,7 +105,9 @@ jobs:
       - name: schema generates and keeps its committed paths
         working-directory: services/api
         env:
-          DATABASE_URL: sqlite+pysqlite:///:memory:
+          # Quoted: the value ends in a colon, which YAML would otherwise read as
+          # the start of a nested mapping ("mapping values are not allowed here").
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
         run: |
           python - <<'PY'
           import json, sys
