@@ -794,9 +794,26 @@ function setupEventListeners() {
         view2dPane.classList.add("hidden");
         workspaceTitleEl.textContent = "3D Neuro-Vascular Risk Model";
 
+        // Report a missing viewer instead of skipping silently. `if
+        // (window.NeuroViewer)` on its own turns any module-load failure into
+        // an indefinite spinner with nothing logged — the user sees the
+        // panel's static "Loading…" text forever and there is no way to tell
+        // whether the model, the loader, or the engine is at fault.
         if (window.NeuroViewer) {
             window.NeuroViewer.init("neuro-3d-mount");
             window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
+        } else {
+            const el = document.getElementById("neuro-3d-loading");
+            if (el) {
+                el.classList.remove("hidden");
+                el.style.color = "var(--color-high-risk)";
+                el.innerHTML =
+                    '<i class="fa-solid fa-triangle-exclamation"></i> ' +
+                    "3D engine unavailable — the three.js module did not load.<br>" +
+                    "The 2D heatmap and all hemodynamic metrics are unaffected.";
+            }
+            console.error("[NeuroFlow] window.NeuroViewer undefined: neuro3d.js "
+                + "did not execute. Check that ./vendor/three/ is being served.");
         }
     });
 
