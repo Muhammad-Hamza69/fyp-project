@@ -100,6 +100,42 @@ function clamp01(v) {
     return Math.max(0, Math.min(1, v));
 }
 
+/**
+ * Was this case solved over a cardiac cycle?
+ *
+ * OSI, ECAP, transWSS, AFI and GON are all cycle quantities — they are not
+ * merely small on a steady solve, they are undefined. The worker records the
+ * distinction as `hemodynamics.transient`. Demonstration cases carry no
+ * hemodynamics block and their OSI values are curated, so they are treated as
+ * available: the DEMO badge already tells the reader what they are.
+ */
+/**
+ * Attach (or clear) a short explanatory note under a gauge value.
+ *
+ * A bare "n/a" invites the reading that the pipeline broke. It did not — the
+ * quantity is undefined for this kind of solve, and saying which is the whole
+ * point of not printing 0.00.
+ */
+function setGaugeNote(valueEl, text) {
+    if (!valueEl || !valueEl.parentElement) return;
+    let note = valueEl.parentElement.querySelector(".gauge-note");
+    if (!text) {
+        if (note) note.remove();
+        return;
+    }
+    if (!note) {
+        note = document.createElement("div");
+        note.className = "gauge-note";
+        valueEl.parentElement.appendChild(note);
+    }
+    note.textContent = text;
+}
+
+function hemodynamicsAreTransient(patient) {
+    const h = patient && patient.hemodynamics;
+    return !h || h.transient !== false;
+}
+
 function computeRiskBreakdown(patient) {
     const domeZone = patient.zones.find(z => z.name === "Aneurysm Dome");
     const { maxDiameter, aspectRatio } = patient.morphology;
@@ -111,8 +147,25 @@ function computeRiskBreakdown(patient) {
 
     const composite = (tawssScore * 0.35) + (osiScore * 0.30) + (diameterScore * 0.20) + (aspectScore * 0.15);
 
+    // On a steady solve osiScore is 0 for want of a cycle, not for want of
+    // oscillation — yet it still consumes its full 30% of the weighting. The
+    // composite is therefore a strict LOWER BOUND on this case's risk: any real
+    // OSI can only raise it. That is worth saying rather than presenting the
+    // number as complete.
+    //
+    // The weights are deliberately NOT renormalised over the remaining terms.
+    // Doing so would silently restate every steady case's headline score (this
+    // cohort's 39/49/59 would become 56/64/72 and change two risk tiers) on the
+    // strength of a quantity nobody measured. A stated lower bound is honest;
+    // an invented redistribution is not.
+    const osiComputed = hemodynamicsAreTransient(patient);
+    const maxIfOsiWere = composite + (osiComputed ? 0 : 100 * 0.30);
+
     return {
         tawssScore, osiScore, diameterScore, aspectScore,
+        osiComputed,
+        compositeIsLowerBound: !osiComputed,
+        compositeUpperBound: Math.round(maxIfOsiWere),
         composite: Math.round(composite)
     };
 }
@@ -654,8 +707,14 @@ function updateRadialGauges() {
     // Explainability: show each factor's contribution to the score above
     breakdownTawssFillEl.style.width = `${breakdown.tawssScore}%`;
     breakdownTawssPctEl.textContent = `${Math.round(breakdown.tawssScore)}%`;
+    // "0%" here would read as a measured absence of oscillatory shear. On a
+    // steady solve the term was never computed, so it says so — while still
+    // occupying its 30% of the weighting, which is why the composite below is
+    // flagged as a lower bound.
     breakdownOsiFillEl.style.width = `${breakdown.osiScore}%`;
-    breakdownOsiPctEl.textContent = `${Math.round(breakdown.osiScore)}%`;
+    breakdownOsiPctEl.textContent = breakdown.osiComputed
+        ? `${Math.round(breakdown.osiScore)}%` : "n/a";
+    breakdownOsiPctEl.classList.toggle("gauge-not-computed", !breakdown.osiComputed);
     breakdownDiameterFillEl.style.width = `${breakdown.diameterScore}%`;
     breakdownDiameterPctEl.textContent = `${Math.round(breakdown.diameterScore)}%`;
     breakdownAspectFillEl.style.width = `${breakdown.aspectScore}%`;
@@ -684,6 +743,19 @@ function updateRadialGauges() {
     compositeRiskLabelEl.className = `risk-label-text ${tier.riskLabelClass}`;
     compositeRiskLabelEl.textContent = tier.riskLabel;
 
+    // Say so when 30% of the score rests on a term that was never computed.
+    // Without this the reader has no way to know the index is incomplete, and
+    // a missing OSI can only ever have pushed the number DOWN.
+    const cbNote = document.getElementById("composite-bound-note");
+    if (cbNote) {
+        cbNote.classList.toggle("hidden", !breakdown.compositeIsLowerBound);
+        if (breakdown.compositeIsLowerBound) {
+            cbNote.textContent =
+                `Lower bound — OSI (30% weight) not computed on this steady solve. `
+                + `With OSI the index could reach ${breakdown.compositeUpperBound}.`;
+        }
+    }
+
     // 2. TAWSS Gauge (Dome value)
     const domeZone = activePatient.zones.find(z => z.name === "Aneurysm Dome");
     const tawssVal = domeZone.tawss;
@@ -705,20 +777,35 @@ function updateRadialGauges() {
     }
 
     // 3. OSI Gauge (Dome value)
+    //
+    // OSI is only DEFINED for a transient solve. It measures how far the wall
+    // shear vector reverses over a cardiac cycle: OSI = 0.5(1 - |mean(tau)| /
+    // mean|tau|). A steady solve has one flow state, so the two averages are
+    // identical and OSI is exactly 0 by construction — not because the flow
+    // does not oscillate, but because nothing was ever averaged.
+    //
+    // Printing "0.00" there asserts a measurement that was never made, and 0.00
+    // is the most reassuring value on the scale. Cases without a cycle now show
+    // no number at all.
+    const osiComputed = hemodynamicsAreTransient(patient);
     const osiVal = domeZone.osi;
-    osiGaugeValEl.textContent = osiVal.toFixed(2);
+    osiGaugeValEl.textContent = osiComputed ? osiVal.toFixed(2) : "n/a";
+    osiGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed);
+    setGaugeNote(osiGaugeValEl, osiComputed ? "" : "steady solve — no cardiac cycle");
 
     // Map OSI progress ring: Max OSI range 0.5
     osiProgressFill.style.strokeDasharray = progressCircumference;
-    const osiFactor = Math.min(1.0, osiVal / 0.5);
+    const osiFactor = osiComputed ? Math.min(1.0, osiVal / 0.5) : 0;
     osiProgressFill.style.strokeDashoffset = progressCircumference - (osiFactor * progressCircumference);
 
-    // OSI Threshold alert check (> 0.3)
-    if (osiVal > 0.3) {
+    // OSI Threshold alert check (> 0.3). An uncomputed OSI must not clear the
+    // alert either — absence of evidence is not evidence of a safe value.
+    if (osiComputed && osiVal > 0.3) {
         osiProgressFill.style.stroke = "var(--color-high-risk)";
         osiAlertEl.classList.remove("hidden");
     } else {
-        osiProgressFill.style.stroke = "var(--color-accent)";
+        osiProgressFill.style.stroke = osiComputed
+            ? "var(--color-accent)" : "var(--color-text-secondary, #94a3b8)";
         osiAlertEl.classList.add("hidden");
     }
 
@@ -741,20 +828,27 @@ function updateRadialGauges() {
     }
 
     // 5. ECAP Gauge (Dome value) - Endothelial Cell Activation Potential
+    //
+    // ECAP = OSI / TAWSS, so it inherits OSI's dependence on a cardiac cycle
+    // exactly. On a steady solve it is 0/TAWSS = 0 for the same reason, and is
+    // just as meaningless.
     const ecapVal = computeECAP(domeZone);
-    ecapGaugeValEl.textContent = ecapVal.toFixed(2);
+    ecapGaugeValEl.textContent = osiComputed ? ecapVal.toFixed(2) : "n/a";
+    ecapGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed);
+    setGaugeNote(ecapGaugeValEl, osiComputed ? "" : "requires OSI");
 
     // Map ECAP progress ring: display range 0-2.0
     ecapProgressFill.style.strokeDasharray = progressCircumference;
-    const ecapFactor = Math.min(1.0, ecapVal / 2.0);
+    const ecapFactor = osiComputed ? Math.min(1.0, ecapVal / 2.0) : 0;
     ecapProgressFill.style.strokeDashoffset = progressCircumference - (ecapFactor * progressCircumference);
 
     // ECAP Threshold alert check (> 1.0 - oscillatory component exceeds mean shear)
-    if (ecapVal > 1.0) {
+    if (osiComputed && ecapVal > 1.0) {
         ecapProgressFill.style.stroke = "var(--color-high-risk)";
         ecapAlertEl.classList.remove("hidden");
     } else {
-        ecapProgressFill.style.stroke = "var(--color-accent)";
+        ecapProgressFill.style.stroke = osiComputed
+            ? "var(--color-accent)" : "var(--color-text-secondary, #94a3b8)";
         ecapAlertEl.classList.add("hidden");
     }
 }

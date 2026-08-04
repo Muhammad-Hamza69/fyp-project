@@ -222,6 +222,9 @@
                     </div>
                     <div class="composite-risk-label-wrap">
                         <span id="composite-risk-label" class="risk-label-text">Calculating...</span>
+                        <!-- Shown only when OSI (30% of the weighting) could not be
+                             computed, which makes the index a lower bound. -->
+                        <div id="composite-bound-note" class="composite-bound-note hidden"></div>
                     </div>
 
                     <!-- Explainability: contribution of each factor to the score above -->
