@@ -202,6 +202,35 @@ def build_patient(
         for k, v in zone_values.items()
     ]
 
+    # Full parameter set from the hemodynamic engine. Kept non-fatal: if the
+    # engine cannot read a field the case still exports with its core metrics
+    # rather than failing outright, since TAWSS/OSI already carry the risk score.
+    engine_extras: dict[str, Any] = {}
+    try:
+        import hemodynamic_engine as hx  # type: ignore
+        e = hx.run(case_dir)
+        engine_extras = {
+            "transWssPa": round(e.sac.transwss_pa, 4),
+            "wssgPaPerMm": round(e.sac.wssg_pa_per_mm, 4),
+            "afi": round(e.sac.afi, 4),
+            "gon": round(e.sac.gon, 4),
+            "lsa": round(e.lsa, 4),
+            "hsa": round(e.hsa, 4),
+            "sci": round(e.sci, 3),
+            "ici": round(e.ici, 3),
+            "ker": round(e.ker, 4),
+            "vdr": round(e.vdr, 4),
+            "plc": round(e.plc, 3),
+            "vortexVolumeFraction": round(e.vortex_volume_fraction, 4),
+            "reynolds": round(e.reynolds, 1),
+            "womersley": round(e.womersley, 2),
+            "meanVelocityMs": round(e.mean_inlet_velocity_ms, 4),
+            "wssStdPa": round(e.sac.wss_std_pa, 4),
+            "transient": e.transient,
+        }
+    except Exception as exc:  # noqa: BLE001
+        engine_extras = {"engineError": f"{exc.__class__.__name__}: {exc}"}
+
     breakdown = compute_composite(
         dome["tawss"], dome["osi"], morph.max_diameter_mm, morph.aspect_ratio
     )
@@ -249,6 +278,7 @@ def build_patient(
             "ecap": round(dome["ecap"], 4),
             "wssMaxPa": round(hemo["wss_max_pa"], 3),
             "wssMinPa": round(hemo["wss_min_pa"], 4),
+            **engine_extras,
         },
         "riskBreakdown": breakdown,
         "riskTier": tier,

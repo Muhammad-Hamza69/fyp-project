@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from auth import Principal, auth_status, current_principal, tenant_filter
 from db import get_session, init_db
 from models import (
     AIResult, Artifact, CFDResult, JobStage, JobState, Patient, Report,
@@ -129,7 +130,20 @@ def health(s: Session = Depends(db)) -> dict[str, Any]:
         "status": "ok" if database == "up" else "degraded",
         "version": API_VERSION,
         "database": database,
+        "auth": auth_status(),
         "time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/v1/me", tags=["meta"])
+def whoami(p: Principal = Depends(current_principal)) -> dict[str, Any]:
+    """Resolve the calling principal and the tenant its queries are scoped to."""
+    return {
+        "user_id": p.user_id,
+        "org_id": p.org_id,
+        "email": p.email,
+        "dev_mode": p.is_dev,
+        "tenant_scope": tenant_filter(p),
     }
 
 
@@ -144,8 +158,19 @@ def list_stages() -> dict[str, list[str]]:
 # --------------------------------------------------------------------------- #
 
 @app.get("/api/v1/patients", tags=["patients"])
-def list_patients(s: Session = Depends(db), limit: int = Query(100, le=500)) -> list[dict]:
-    rows = s.execute(select(Patient).limit(limit)).scalars().all()
+def list_patients(
+    s: Session = Depends(db),
+    limit: int = Query(100, le=500),
+    principal: Principal = Depends(current_principal),
+) -> list[dict]:
+    q = select(Patient)
+    # Tenant isolation: an authenticated caller sees only its organisation's
+    # records. Applied in the query, not filtered afterwards, so a large tenant
+    # cannot exhaust the page limit for a small one.
+    org = tenant_filter(principal)
+    if org:
+        q = q.where(Patient.clerk_org_id == org)
+    rows = s.execute(q.limit(limit)).scalars().all()
     out = []
     for p in rows:
         d = {c.name: getattr(p, c.name) for c in Patient.__table__.columns}
@@ -155,10 +180,20 @@ def list_patients(s: Session = Depends(db), limit: int = Query(100, le=500)) -> 
 
 
 @app.post("/api/v1/patients", tags=["patients"], status_code=201)
-def create_patient(body: PatientIn, s: Session = Depends(db)) -> dict:
+def create_patient(
+    body: PatientIn,
+    s: Session = Depends(db),
+    principal: Principal = Depends(current_principal),
+) -> dict:
     if s.get(Patient, body.patient_id):
         raise HTTPException(409, f"patient {body.patient_id} already exists")
-    p = Patient(**body.model_dump())
+    data = body.model_dump()
+    # Stamp the caller's tenant rather than trusting the request body — a client
+    # must not be able to create records inside another organisation.
+    org = tenant_filter(principal)
+    if org:
+        data["clerk_org_id"] = org
+    p = Patient(**data)
     s.add(p); s.commit()
     return {c.name: getattr(p, c.name) for c in Patient.__table__.columns}
 

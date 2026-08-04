@@ -3,8 +3,9 @@
 # computed CFD cases. Do not add *.json here.
 
 # source / tooling that never reaches the browser
+# NOTE: services/ IS shipped — api/index.py imports services/api/main.py
+# for the serverless function. Only the worker subtree is excluded.
 neuroflow-local-pipeline
-services
 packages
 infra
 node_modules
@@ -27,3 +28,4 @@ python-script.txt
 .supabase
 .env
 .env.*
+services/worker

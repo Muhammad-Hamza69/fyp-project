@@ -1,0 +1,17 @@
+# Dependencies for the Vercel serverless API function ONLY.
+#
+# Deliberately minimal: the API serves database reads and needs none of the
+# scientific stack. VTK/PyVista/SimpleITK/ITK together exceed Vercel's
+# serverless bundle limit and are only required on the CFD worker, which runs
+# on the machine with OpenFOAM.
+#
+# The worker's full environment is created separately — see
+# docs/migration-plan.md Phase 0.5.
+
+fastapi==0.141.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+sqlalchemy==2.0.51
+psycopg[binary]==3.3.4
+pyjwt[crypto]==2.13.0
+python-dotenv==1.2.2

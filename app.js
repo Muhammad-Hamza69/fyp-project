@@ -329,7 +329,12 @@ const activeStepBadge = document.getElementById("active-step-badge");
 // Both return the identical payload shape, so the rendering code below is
 // unaware of which one answered. The static file is what the deployed static
 // site uses; the API is what a local full-stack demo uses.
-const API_BASE = (window.NEUROFLOW_API_BASE || "http://127.0.0.1:8000").replace(/\/$/, "");
+// Empty string = same origin. The API is deployed as a serverless function
+// alongside this page at /api/v1, so relative URLs avoid CORS entirely and
+// work identically in production and in a local `python -m http.server` when
+// an API is running on the same host. Override with window.NEUROFLOW_API_BASE
+// to point at a separately-hosted API.
+const API_BASE = (window.NEUROFLOW_API_BASE ?? "").replace(/\/$/, "");
 
 async function fetchComputedCases() {
     // Short timeout: if no API is running (the normal case for the deployed
