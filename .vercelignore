@@ -29,3 +29,8 @@ python-script.txt
 .env
 .env.*
 services/worker
+
+# Retired: 35.7 MB generic nerve asset, ~70 s to download, unrelated to any
+# patient's vasculature. Replaced by per-case models/{id}.glb (~1 MB) exported
+# from the actual solved surface. Kept in git history, not shipped.
+NervesOnly_v1.glb
