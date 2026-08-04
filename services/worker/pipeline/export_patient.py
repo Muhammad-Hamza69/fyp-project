@@ -210,6 +210,16 @@ def build_patient(
         import hemodynamic_engine as hx  # type: ignore
         e = hx.run(case_dir)
         engine_extras = {
+            # RRT/ECAP are non-linear in TAWSS, so the spatial average of the
+            # pointwise value differs from the value at the spatial mean
+            # (Jensen). The dashboard gauge derives RRT from the single mean
+            # TAWSS it displays, which corresponds to *_from_means; the
+            # area-weighted figure is the true surface average. Both are
+            # exported so the report can state which it is quoting.
+            "rrtAreaWeighted": round(e.sac.rrt, 3),
+            "rrtFromMeans": round(e.sac.rrt_from_means, 3),
+            "ecapAreaWeighted": round(e.sac.ecap, 4),
+            "ecapFromMeans": round(e.sac.ecap_from_means, 4),
             "transWssPa": round(e.sac.transwss_pa, 4),
             "wssgPaPerMm": round(e.sac.wssg_pa_per_mm, 4),
             "afi": round(e.sac.afi, 4),

@@ -91,8 +91,19 @@ class WallMetrics:
     wss_max_pa: float
     wss_std_pa: float
     osi: float
+    # RRT and ECAP are NON-LINEAR in TAWSS, so the surface average of the
+    # pointwise value is NOT the value computed from the surface averages
+    # (Jensen's inequality). Both are reported because both appear in the
+    # literature and they can differ by 2-3x:
+    #   rrt  — area-weighted mean of per-face RRT  (the spatial average)
+    #   rrt_from_means — RRT evaluated at the mean TAWSS/OSI (what a dashboard
+    #                    gauge showing a single TAWSS number implies)
+    # Quoting one while displaying the other is how a system ends up looking
+    # internally inconsistent when it is in fact reporting two valid quantities.
     rrt: float
+    rrt_from_means: float
     ecap: float
+    ecap_from_means: float
     transwss_pa: float
     wssg_pa_per_mm: float
     afi: float
@@ -215,16 +226,24 @@ def analyse_wall(surf: pv.PolyData, patch: str) -> tuple[WallMetrics, dict[str, 
     # GON: oscillation of the WSSG direction. Without a time series this is 0.
     gon = np.zeros_like(tawss)
 
+    mean_tawss = _awmean(tawss, areas)
+    mean_osi = _awmean(osi, areas)
+    # Same formulas, evaluated at the mean values rather than averaged pointwise.
+    rrt_from_means = 1.0 / max(DIVISION_FLOOR, (1.0 - 2.0 * mean_osi) * mean_tawss)
+    ecap_from_means = mean_osi / max(DIVISION_FLOOR, mean_tawss)
+
     metrics = WallMetrics(
         patch=patch,
         area_mm2=float(areas.sum()),
-        tawss_pa=_awmean(tawss, areas),
+        tawss_pa=mean_tawss,
         wss_min_pa=float(tawss.min()),
         wss_max_pa=float(tawss.max()),
-        wss_std_pa=float(np.sqrt(_awmean((tawss - _awmean(tawss, areas)) ** 2, areas))),
-        osi=_awmean(osi, areas),
+        wss_std_pa=float(np.sqrt(_awmean((tawss - mean_tawss) ** 2, areas))),
+        osi=mean_osi,
         rrt=_awmean(rrt, areas),
+        rrt_from_means=float(rrt_from_means),
         ecap=_awmean(ecap, areas),
+        ecap_from_means=float(ecap_from_means),
         transwss_pa=_awmean(transwss, areas),
         wssg_pa_per_mm=_awmean(wssg, areas),
         afi=_awmean(afi, areas),

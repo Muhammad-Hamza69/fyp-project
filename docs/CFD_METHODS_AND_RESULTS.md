@@ -112,6 +112,17 @@ LSAR = sac area fraction below threshold
 
 **LSAR is reported under both definitions.** The literature definition (Xiang et al., 2011) uses *10% of the parent-artery mean*; the project's architecture document implies *< 0.4 Pa absolute*. These diverge whenever parent-artery shear is far from 4 Pa, so collapsing them into a single number would make the metric irreproducible. Both are stored.
 
+**(d) RRT and ECAP are non-linear, so "the average" is ambiguous.** Both are reciprocal in TAWSS, and by Jensen's inequality the surface average of the pointwise value is *not* the value computed from the surface averages. For the sac these differ by more than a factor of two:
+
+| | Sac RRT (Pa⁻¹) |
+|---|---|
+| Area-weighted mean of per-face RRT | **11.04** |
+| RRT evaluated at the mean TAWSS/OSI | **4.24** |
+
+Neither is wrong; they answer different questions. The area-weighted figure is the true spatial average and is dominated by the low-shear regions where RRT is largest. The from-means figure is what a dashboard gauge implies when it displays one TAWSS number and one RRT number derived from it — and it is what the dashboard shows.
+
+Both are computed and stored (`rrt` and `rrt_from_means`, likewise for ECAP). Reporting one while displaying the other is exactly how a system comes to look internally inconsistent while in fact being correct twice.
+
 ---
 
 ## 3. Verification
