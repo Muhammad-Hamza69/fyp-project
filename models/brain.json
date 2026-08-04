@@ -1,0 +1,150 @@
+{
+  "glb": "brain.glb",
+  "bytes": 3616344,
+  "source": "NervesOnly_v1.glb",
+  "source_bytes": 35700808,
+  "kept_mesh": "Mesh_155",
+  "dropped_meshes": [
+    "Mesh_155.001",
+    "Mesh_155.002"
+  ],
+  "faces_before": 902087,
+  "faces_after": 149999,
+  "vertices_before": 453091,
+  "vertices_after": 75638,
+  "sites": {
+    "ICA": {
+      "nominal": [
+        -0.13,
+        0.16,
+        -0.4
+      ],
+      "centre": [
+        -0.11022418540478782,
+        0.1556068920105003,
+        -0.38979656909504207
+      ],
+      "outward": [
+        -0.17773077657625214,
+        0.1296498249949025,
+        -0.9755012526575214
+      ],
+      "snap_distance": 0.022682421452390498,
+      "snap_distance_mm": 2.104424656971785,
+      "snap_ok": true
+    },
+    "MCA": {
+      "nominal": [
+        -0.34,
+        0.1,
+        -0.28
+      ],
+      "centre": [
+        -0.3283536118573702,
+        0.0949144466414765,
+        -0.27070703865402285
+      ],
+      "outward": [
+        -0.5804343590557393,
+        0.027321245675855036,
+        -0.81384857581879
+      ],
+      "snap_distance": 0.01574358092395132,
+      "snap_distance_mm": 1.4606544523888167,
+      "snap_ok": true
+    },
+    "ACOM": {
+      "nominal": [
+        0.0,
+        0.4,
+        -0.3
+      ],
+      "centre": [
+        -0.0007049675566870163,
+        0.41957994856711767,
+        -0.28108651392194584
+      ],
+      "outward": [
+        0.009648143546524214,
+        0.5924768215463715,
+        -0.8055297196605565
+      ],
+      "snap_distance": 0.027232174367312314,
+      "snap_distance_mm": 2.526540621856198,
+      "snap_ok": true
+    },
+    "PCOM": {
+      "nominal": [
+        -0.17,
+        -0.02,
+        -0.38
+      ],
+      "centre": [
+        -0.1303889585311469,
+        0.012909206941302136,
+        -0.29349345242200625
+      ],
+      "outward": [
+        -0.25083628802431857,
+        -0.1350518254591169,
+        -0.9585625493677195
+      ],
+      "snap_distance": 0.10067488903205381,
+      "snap_distance_mm": 9.340392482418325,
+      "snap_ok": false
+    },
+    "POST": {
+      "nominal": [
+        0.0,
+        -0.2,
+        -0.45
+      ],
+      "centre": [
+        0.0023578756993688247,
+        -0.06847070156995222,
+        -0.25865499491510435
+      ],
+      "outward": [
+        0.01852773373186489,
+        -0.31945113340095854,
+        -0.9474216043829716
+      ],
+      "snap_distance": 0.23220341705981198,
+      "snap_distance_mm": 21.54331702721589,
+      "snap_ok": false
+    },
+    "BASILAR": {
+      "nominal": [
+        0.0,
+        -0.2,
+        -0.45
+      ],
+      "centre": [
+        0.0023578756993688247,
+        -0.06847070156995222,
+        -0.25865499491510435
+      ],
+      "outward": [
+        0.01852773373186489,
+        -0.31945113340095854,
+        -0.9474216043829716
+      ],
+      "snap_distance": 0.23220341705981198,
+      "snap_distance_mm": 21.54331702721589,
+      "snap_ok": false
+    }
+  },
+  "site_aliases": {
+    "ACOM_PCOM_POST": "ACOM"
+  },
+  "default_site": "MCA",
+  "legacy_topmost_y_hotspot": [
+    0.005845098517153717,
+    0.8342444300594396,
+    0.16874112797842794
+  ],
+  "units_per_mm": 0.010778443113772455,
+  "brain_length_mm": 167.0,
+  "orientation": "+Y anterior, +Z superior, X left-right (verified by axis renders)",
+  "note": "Generic anatomical asset \u2014 not patient-derived. Per-patient content is the bulge: size from measured morphology, colour from computed hemodynamics."
+}

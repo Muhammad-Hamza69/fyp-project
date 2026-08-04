@@ -517,6 +517,37 @@ body {
     display: none;
 }
 
+/* Provenance strip under the 3D view: says which part of the render is
+   measured data and which is generic anatomy. Sits bottom-left so it does not
+   collide with the colour legend at bottom-right. */
+.neuro-3d-provenance {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    max-width: 46ch;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    background-color: rgba(255, 255, 255, 0.88);
+    padding: 7px 10px;
+    border-radius: 4px;
+    border-left: 3px solid var(--color-low-risk, #1F5F99);
+    pointer-events: none;
+}
+
+.neuro-3d-provenance strong {
+    color: var(--text-primary);
+}
+
+/* Below this the two overlays would overlap; the provenance note is the one
+   that can be dropped, because the colour legend is unreadable without its
+   swatches whereas this text is repeated in the report. */
+@media (max-width: 900px) {
+    .neuro-3d-provenance {
+        display: none;
+    }
+}
+
 .neuro-3d-legend {
     position: absolute;
     bottom: 12px;

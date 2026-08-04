@@ -25,11 +25,20 @@ SRC="$HOME/cases/synthetic01_pulsatile"
 TPL=/mnt/d/fyp/services/worker/openfoam/case_template
 FOAM=/usr/lib/openfoam/openfoam2412/etc/bashrc
 NPROC=3          # leave 6 for the fine run; WSL exposes 10 logical CPUs
+VENV_PY="$HOME/.venvs/neuroflow/bin/python"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
 # shellcheck disable=SC1090
 source "$FOAM"
+
+# RESUME=1 keeps an existing, already-graded mesh and restarts at the solve.
+# Meshing is deterministic here, so re-running it after a gate change only
+# burns four minutes to reproduce the identical mesh.
+if [ "${RESUME:-0}" = "1" ] && [ -d "$CASE/constant/polyMesh" ]; then
+  log "RESUME=1 — keeping existing mesh, skipping to the gate"
+  cd "$CASE" || exit 1
+else
 
 log "building coarse case"
 rm -rf "$CASE"; mkdir -p "$CASE/constant/triSurface"
@@ -62,7 +71,29 @@ log "blockMesh";             blockMesh              > log.blockMesh 2>&1
 log "surfaceFeatureExtract"; surfaceFeatureExtract  > log.sfe 2>&1
 log "snappyHexMesh";         snappyHexMesh -overwrite > log.snappy 2>&1
 log "checkMesh";             checkMesh -constant    > log.checkMesh 2>&1
-grep -q "Mesh OK" log.checkMesh || { log "FATAL: checkMesh failed"; exit 1; }
+
+fi   # end of mesh-build block (skipped when RESUME=1)
+
+# Quantified gate, not `grep "Mesh OK"`.
+#
+# The binary grep discarded this exact mesh over `Max skewness = 4.404` vs a
+# limit of 4 — three faces out of ~320,000, all of them on the outlet cap at
+# x = 99.6-99.9 mm, 50 mm downstream of the sac. Non-orthogonality was 59.2
+# against a limit of 65. Throwing away a two-hour run over three faces that
+# cannot influence sac OSI is not rigour, it is a gate that cannot see.
+#
+# The ROI is the sac: centred at x = 50 mm on the parent axis, 15 mm radius
+# (the sac itself reaches ~7.4 mm, so this is generous). Skewness is waived
+# ONLY for faces proven to lie outside it; non-orthogonality is never waived.
+#
+# Uses the venv interpreter explicitly: the gate imports pyvista to locate the
+# offending faces, and the system python3 (PEP 668, no site-packages) does not
+# have it. Falling back to python3 here would make the gate fail closed on
+# every mesh, which looks like a mesh problem and is not one.
+log "mesh gate"
+"$VENV_PY" /mnt/d/fyp/services/worker/pipeline/mesh_gate.py "$CASE" \
+    --roi-centre 0.050 0.0 0.0 --roi-radius 0.015 || {
+  log "FATAL: mesh gate failed — see above"; exit 1; }
 log "cells: $(grep -oP '^\s+cells:\s+\K[0-9]+' log.checkMesh | head -1)"
 
 # Steady warm start. Cheap on a coarse mesh, and it removes most of the

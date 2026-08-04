@@ -121,20 +121,72 @@ def build(
     surf.point_data["TAWSS_Pa"] = tawss
     surf.point_data["OSI"] = osi
 
-    # Decimate, then RESAMPLE the scalars onto the reduced mesh.
+    # Field statistics are taken HERE, at full resolution and area-weighted,
+    # because neither property survives decimation honestly:
+    #
+    #  - Decimation is curvature-driven. It preserves vertices on the highly
+    #    curved sac (low shear) and collapses the smooth parent artery (high
+    #    shear), so a vertex mean over the decimated mesh is biased low —
+    #    measured at 0.31 Pa against a true 1.30 Pa on PT-2026-0102.
+    #  - A vertex mean is not area-weighted in any case. Mesh refinement
+    #    clusters vertices where cells are small, which silently weights those
+    #    regions more heavily than the area they actually occupy.
+    #
+    # Area-weighting over the original surface gives the same quantity the
+    # hemodynamic engine reports, so the sidecar and the engine agree.
+    _cs = surf.point_data_to_cell_data().compute_cell_sizes(
+        length=False, area=True, volume=False)
+    _area = np.asarray(_cs.cell_data["Area"], dtype=float)
+    _tot = float(_area.sum())
+    _tawss_cells = np.asarray(_cs.cell_data["TAWSS_Pa"], dtype=float)
+    stats = {
+        "tawss_min_pa": float(tawss.min()),
+        "tawss_max_pa": float(tawss.max()),
+        "tawss_mean_pa": float((_tawss_cells * _area).sum() / _tot) if _tot else 0.0,
+        "tawss_mean_basis": "area-weighted over full-resolution wall patches",
+        "wall_area_mm2": _tot * 1e6,
+    }
+
+    # Decimate, then transfer the scalars by NEAREST NEIGHBOUR.
     #
     # `decimate` does not carry point data through reliably (and the following
-    # `clean` drops what survives), so reading the arrays off the decimated
-    # surface raises KeyError. Sampling from the full-resolution surface is
-    # both robust and more correct: each surviving vertex takes the field value
-    # interpolated at its own position rather than inheriting a neighbour's.
+    # `clean` drops what survives), so the values must be transferred back.
+    #
+    # PolyData.sample() was tried and is WRONG here. It is a probe filter: it
+    # requires each target point to fall geometrically INSIDE a source cell.
+    # For a 2-D surface embedded in 3-D, decimated vertices lie on the surface
+    # but miss cell containment by floating-point margins, and the probe then
+    # returns 0.0 for them. Measured on PT-2026-0102: 15,550 of 20,091
+    # vertices (77.4%) came back as exactly zero, with vtkValidPointMask == 0
+    # for precisely those points. Zero TAWSS maps to maximum risk, so 77% of
+    # the mesh rendered solid red — a completely wrong picture, produced
+    # without a single error.
+    #
+    # A KD-tree lookup has no containment requirement. Every decimated vertex
+    # is a subset of (or extremely close to) an original vertex, so nearest
+    # neighbour is not an approximation here — it recovers the exact value.
     n_before = surf.n_cells
     if target_faces and surf.n_cells > target_faces:
+        from scipy.spatial import cKDTree
+
+        src_pts = np.asarray(surf.points, dtype=float)
         reduced = surf.decimate(1.0 - target_faces / surf.n_cells).clean().triangulate()
-        reduced = reduced.sample(surf)
+        _, idx = cKDTree(src_pts).query(np.asarray(reduced.points, dtype=float), k=1)
+
+        tawss = np.asarray(tawss, dtype=float)[idx]
+        osi = np.asarray(osi, dtype=float)[idx]
+        reduced.point_data["TAWSS_Pa"] = tawss
+        reduced.point_data["OSI"] = osi
         surf = reduced
-        tawss = np.asarray(surf.point_data["TAWSS_Pa"], dtype=float)
-        osi = np.asarray(surf.point_data["OSI"], dtype=float)
+
+        # A zero here would mean the transfer failed again; the source field
+        # has no exact zeros, so this cannot legitimately trigger.
+        n_zero = int((tawss == 0.0).sum())
+        if n_zero:
+            raise RuntimeError(
+                f"{n_zero} vertices have TAWSS exactly 0 after transfer — "
+                "scalar transfer failed"
+            )
 
     colours = _colours(_risk_factor(tawss, osi, mode))
 
@@ -165,9 +217,12 @@ def build(
         "faces_before": int(n_before),
         "faces_after": int(len(faces)),
         "vertices": int(len(pts)),
-        "tawss_min_pa": float(tawss.min()),
-        "tawss_max_pa": float(tawss.max()),
-        "tawss_mean_pa": float(tawss.mean()),
+        **stats,
+        # Range actually baked into the vertex colours. It should bracket the
+        # full-res range above; a collapse to near-zero would mean the scalar
+        # transfer regressed.
+        "baked_min_pa": float(tawss.min()),
+        "baked_max_pa": float(tawss.max()),
         "scale_m_per_unit": extent,
         "centre_m": [float(c) for c in centre],
     }

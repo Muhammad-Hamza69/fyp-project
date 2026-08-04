@@ -160,12 +160,28 @@
                         <div id="neuro-3d-mount" class="neuro-3d-mount"></div>
 
                         <div id="neuro-3d-loading" class="neuro-3d-loading">
-                            <i class="fa-solid fa-circle-notch fa-spin"></i> Loading 3D nerve/vascular model...
+                            <i class="fa-solid fa-circle-notch fa-spin"></i> Loading cerebral vasculature...
                         </div>
 
                         <div class="canvas-overlay-hints">
-                            <span><i class="fa-solid fa-arrows-rotate"></i> Drag to rotate &middot; scroll to zoom
-                                &mdash; color reflects the aneurysm's live TAWSS/OSI risk</span>
+                            <span><i class="fa-solid fa-arrows-rotate"></i> Drag to rotate &middot; scroll to zoom</span>
+                        </div>
+
+                        <!--
+                            States plainly which part of this view is data and which is
+                            context. The vessel network is a generic anatomical asset and
+                            is identical for every patient; only the sac carries measured
+                            values. Without this, a viewer reasonably assumes the whole
+                            picture is patient-specific, which would be a misreading the
+                            page had invited.
+                        -->
+                        <div class="neuro-3d-provenance">
+                            <i class="fa-solid fa-circle-info"></i>
+                            Vessel network is a <strong>generic anatomical model</strong> shown for
+                            orientation. The <strong>sac</strong> is this case: positioned at its
+                            recorded site, sized at true scale from measured morphology
+                            (<span id="neuro-3d-sac-dims">&mdash;</span>), coloured by computed
+                            <span id="neuro-3d-sac-mode">TAWSS</span>.
                         </div>
 
                         <div class="neuro-3d-legend">
