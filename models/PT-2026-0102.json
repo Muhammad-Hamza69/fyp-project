@@ -1,0 +1,17 @@
+{
+  "glb": "/mnt/d/fyp/models/PT-2026-0102.glb",
+  "bytes": 1043784,
+  "mode": "TAWSS",
+  "faces_before": 212212,
+  "faces_after": 40000,
+  "vertices": 20091,
+  "tawss_min_pa": 0.0,
+  "tawss_max_pa": 27.05362877054722,
+  "tawss_mean_pa": 0.07840079862095395,
+  "scale_m_per_unit": 0.051926802074074664,
+  "centre_m": [
+    0.04796956929051884,
+    0.005210106573741065,
+    -3.532957668704355e-07
+  ]
+}

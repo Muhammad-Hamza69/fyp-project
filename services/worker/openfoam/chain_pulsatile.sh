@@ -12,7 +12,11 @@
 # Launch detached so it survives the shell that started it:
 #   setsid nohup bash chain_pulsatile.sh > ~/chain.log 2>&1 &
 
-set -uo pipefail
+# NOTE: deliberately NOT `set -u`. OpenFOAM's etc/bashrc references variables
+# before defining them (WM_PROJECT_DIR among others), so nounset kills the
+# script the moment it is sourced. `set -e` is also avoided: this script must
+# reach its diagnostic reporting even when a stage fails.
+set -o pipefail
 
 CASE="${1:-$HOME/cases/synthetic01_pulsatile}"
 NPROC="${2:-6}"
@@ -20,9 +24,17 @@ FOAM=/usr/lib/openfoam/openfoam2412/etc/bashrc
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
-log "waiting for the CFD queue to drain (cohort + any solver)…"
-while pgrep -f run_cohort >/dev/null 2>&1 \
-   || pgrep -x simpleFoam >/dev/null 2>&1 \
+log "waiting for the CFD queue to drain…"
+# Match SOLVER PROCESSES ONLY, with -x (exact executable name).
+#
+# An earlier version also did `pgrep -f run_cohort`, which deadlocked: any
+# other shell whose command line merely CONTAINED the string "run_cohort" —
+# including a separate waiter script watching the same job — matched it, so the
+# two waiters each blocked on the other's command line and neither ever
+# proceeded. `pgrep -f` matching your own tooling is a recurring hazard; -x on
+# the binary name cannot match a shell wrapper.
+while pgrep -x simpleFoam >/dev/null 2>&1 \
+   || pgrep -x pimpleFoam >/dev/null 2>&1 \
    || pgrep -x snappyHexMesh >/dev/null 2>&1; do
     sleep 30
 done

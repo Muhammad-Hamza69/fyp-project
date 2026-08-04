@@ -241,6 +241,26 @@ def build_patient(
     except Exception as exc:  # noqa: BLE001
         engine_extras = {"engineError": f"{exc.__class__.__name__}: {exc}"}
 
+    # Convergence assessment travels with the result. A stagnated solve still
+    # produces a complete, plausible-looking field; without this the report
+    # cannot distinguish a converged number from one that merely stopped
+    # improving.
+    convergence_info: dict[str, Any] = {}
+    try:
+        import convergence as cv  # type: ignore
+        rep = cv.analyse_case(case_dir)
+        convergence_info = {
+            "convergenceState": rep.state.value,
+            "convergenceTrustworthy": rep.trustworthy,
+            "massConserved": rep.mass_conserved,
+            "continuityError": rep.continuity_final,
+            "solverIterations": rep.iterations,
+            "residualsFinal": {f.field: f.initial for f in rep.fields},
+            "convergenceNotes": rep.notes,
+        }
+    except Exception as exc:  # noqa: BLE001
+        convergence_info = {"convergenceError": f"{exc.__class__.__name__}: {exc}"}
+
     breakdown = compute_composite(
         dome["tawss"], dome["osi"], morph.max_diameter_mm, morph.aspect_ratio
     )
@@ -309,6 +329,7 @@ def build_patient(
                 f"by multiplying by rho = {RHO}. Validated against the analytic "
                 "Poiseuille solution tau = 4*mu*Q/(pi*r^3)."
             ),
+            **convergence_info,
         },
     }
 

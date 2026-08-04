@@ -1,0 +1,17 @@
+{
+  "glb": "/mnt/d/fyp/models/PT-2026-0103-osi.glb",
+  "bytes": 1043396,
+  "mode": "OSI",
+  "faces_before": 64909,
+  "faces_after": 39999,
+  "vertices": 20078,
+  "tawss_min_pa": 0.0,
+  "tawss_max_pa": 28.263465515005787,
+  "tawss_mean_pa": 2.320322814064902,
+  "scale_m_per_unit": 0.05000904181998146,
+  "centre_m": [
+    0.04989095052678215,
+    0.0006260703077362187,
+    2.1460017140769796e-05
+  ]
+}
