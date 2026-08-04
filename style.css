@@ -539,6 +539,13 @@ body {
     color: var(--text-primary);
 }
 
+/* Demonstration cases render an identically sharp sac, so the distinction has
+   to carry visually as well as in the wording. */
+#neuro-3d-sac-source.is-demo {
+    color: var(--color-mod-risk, #B8860B);
+    font-weight: 600;
+}
+
 /* Below this the two overlays would overlap; the provenance note is the one
    that can be dropped, because the colour legend is unreadable without its
    swatches whereas this text is repeated in the report. */

@@ -222,6 +222,19 @@ function buildSac(patient, mode) {
     }
     const modeEl = document.getElementById('neuro-3d-sac-mode');
     if (modeEl) modeEl.textContent = mode;
+
+    // Demonstration cases are drawn exactly like solved ones, so the panel has
+    // to say which it is looking at. Without this the view would present
+    // curated demo morphology with the same authority as a case that actually
+    // went through OpenFOAM — the sac is equally sharp either way.
+    const srcEl = document.getElementById('neuro-3d-sac-source');
+    if (srcEl) {
+        const computed = patient.provenance && patient.provenance.source === 'computed';
+        srcEl.textContent = computed
+            ? 'measured from the solved surface'
+            : 'curated demonstration values — not computed';
+        srcEl.classList.toggle('is-demo', !computed);
+    }
 }
 
 function disposeSac() {
