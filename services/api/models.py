@@ -26,11 +26,17 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text,
+    JSON, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text,
     UniqueConstraint, func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+# Postgres gets JSONB (indexable, binary); every other dialect gets plain JSON.
+# Declaring JSONB directly makes the models unusable on SQLite, which the test
+# suite and offline tooling rely on — create_all fails with
+# "can't render element of type JSONB" before a single test runs.
+JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Base(DeclarativeBase):
@@ -101,7 +107,7 @@ class Study(Base):
     sha256: Mapped[str | None] = mapped_column(String(64))
     storage_key: Mapped[str | None] = mapped_column(Text)
     quality_score: Mapped[float | None] = mapped_column(Float)
-    quality_report: Mapped[dict | None] = mapped_column(JSONB)
+    quality_report: Mapped[dict | None] = mapped_column(JSONType)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     patient: Mapped[Patient] = relationship(back_populates="studies")
@@ -142,7 +148,7 @@ class JobStage(Base):
     state: Mapped[str] = mapped_column(String(16), default="pending")
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     message: Mapped[str | None] = mapped_column(Text)
-    metrics: Mapped[dict | None] = mapped_column(JSONB)
+    metrics: Mapped[dict | None] = mapped_column(JSONType)
     seq: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -178,7 +184,7 @@ class SegmentationResult(Base):
     n_components: Mapped[int | None] = mapped_column(Integer)
     voxel_count: Mapped[int | None] = mapped_column(Integer)
     stl_key: Mapped[str | None] = mapped_column(Text)
-    details: Mapped[dict | None] = mapped_column(JSONB)
+    details: Mapped[dict | None] = mapped_column(JSONType)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -203,8 +209,8 @@ class CFDResult(Base):
     nwss: Mapped[float | None] = mapped_column(Float)
     lsar_relative: Mapped[float | None] = mapped_column(Float)
     lsar_absolute: Mapped[float | None] = mapped_column(Float)
-    zones: Mapped[dict | None] = mapped_column(JSONB)
-    morphology: Mapped[dict | None] = mapped_column(JSONB)
+    zones: Mapped[dict | None] = mapped_column(JSONType)
+    morphology: Mapped[dict | None] = mapped_column(JSONType)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -218,8 +224,8 @@ class AIResult(Base):
     risk_score: Mapped[float | None] = mapped_column(Float)
     risk_category: Mapped[str | None] = mapped_column(String(16))
     confidence: Mapped[float | None] = mapped_column(Float)
-    feature_vector: Mapped[dict | None] = mapped_column(JSONB)
-    shap_summary: Mapped[dict | None] = mapped_column(JSONB)
+    feature_vector: Mapped[dict | None] = mapped_column(JSONType)
+    shap_summary: Mapped[dict | None] = mapped_column(JSONType)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

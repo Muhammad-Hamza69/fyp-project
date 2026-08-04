@@ -32,15 +32,34 @@ if DATABASE_URL.startswith("postgresql://"):
     # SQLAlchemy 2 + psycopg 3
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
-# Neon is serverless and idles connections aggressively, so pre-ping rather than
-# handing out a socket the far end has already closed.
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=5,
-    future=True,
-)
+def _engine_kwargs(url: str) -> dict:
+    """
+    Pool settings differ by driver.
+
+    Neon is serverless and idles connections aggressively, so a pooled
+    Postgres engine needs pre-ping — otherwise it hands out a socket the far
+    end has already closed. SQLite (used by the test suite and by offline
+    tooling) rejects pool_size/max_overflow outright with a TypeError at
+    create_engine time, so those must not be passed unconditionally.
+    """
+    if url.startswith("sqlite"):
+        from sqlalchemy.pool import StaticPool
+        return {
+            # Keep one in-memory connection alive across sessions; otherwise
+            # every session sees a fresh, empty database.
+            "connect_args": {"check_same_thread": False},
+            "poolclass": StaticPool,
+            "future": True,
+        }
+    return {
+        "pool_pre_ping": True,
+        "pool_size": 5,
+        "max_overflow": 5,
+        "future": True,
+    }
+
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs(DATABASE_URL))
 
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, class_=Session)
 
