@@ -125,6 +125,58 @@
           "p": 6.399847e-08
         },
         "convergenceNotes": []
+      },
+      "ml": {
+        "model_version": "lgbm-synth-v1",
+        "probability": 0.12932054536495266,
+        "risk_category": "Low",
+        "confidence": 0.7413589092700947,
+        "expected_value": -1.9372893534550164,
+        "shap": [
+          {
+            "feature": "tawss_sac_pa",
+            "value": 0.2353,
+            "contribution": 0.3260666467607326
+          },
+          {
+            "feature": "non_sphericity_index",
+            "value": 0.1467,
+            "contribution": -0.30050031467984956
+          },
+          {
+            "feature": "lsar_relative",
+            "value": 0.8434,
+            "contribution": 0.2680994537227027
+          },
+          {
+            "feature": "aspect_ratio",
+            "value": 0.88,
+            "contribution": -0.24373516087255884
+          },
+          {
+            "feature": "osi_sac",
+            "value": 0.0,
+            "contribution": -0.22182377090687233
+          },
+          {
+            "feature": "age",
+            "value": 64.0,
+            "contribution": -0.20212433434279203
+          },
+          {
+            "feature": "site_score",
+            "value": 2.0,
+            "contribution": 0.17788680628596415
+          },
+          {
+            "feature": "ecap_sac",
+            "value": 0.0,
+            "contribution": -0.13150550588011997
+          }
+        ],
+        "cv_auc": 0.620251586145876,
+        "clinical_validity": "ILLUSTRATIVE ONLY. Not trained or validated on patient data. Demonstrates the feature/inference/explainability pipeline. Must not be used for clinical decision-making.",
+        "inputs_complete": false
       }
     },
     {
@@ -250,6 +302,58 @@
           "p": 8.3139923e-08
         },
         "convergenceNotes": []
+      },
+      "ml": {
+        "model_version": "lgbm-synth-v1",
+        "probability": 0.545237381776959,
+        "risk_category": "Moderate",
+        "confidence": 0.09047476355391804,
+        "expected_value": -1.9372893534550164,
+        "shap": [
+          {
+            "feature": "site_score",
+            "value": 4.0,
+            "contribution": 0.6318200394004639
+          },
+          {
+            "feature": "age",
+            "value": 71.0,
+            "contribution": 0.5205342021753889
+          },
+          {
+            "feature": "lsar_relative",
+            "value": 0.9203,
+            "contribution": 0.4846728569881113
+          },
+          {
+            "feature": "tawss_sac_pa",
+            "value": 0.1408,
+            "contribution": 0.2983707338192274
+          },
+          {
+            "feature": "osi_sac",
+            "value": 0.0,
+            "contribution": -0.1898994382102166
+          },
+          {
+            "feature": "non_sphericity_index",
+            "value": 0.3041,
+            "contribution": 0.17008382538232236
+          },
+          {
+            "feature": "nwss",
+            "value": 0.0481,
+            "contribution": 0.1374681208410785
+          },
+          {
+            "feature": "ecap_sac",
+            "value": 0.0,
+            "contribution": -0.1311146737773512
+          }
+        ],
+        "cv_auc": 0.620251586145876,
+        "clinical_validity": "ILLUSTRATIVE ONLY. Not trained or validated on patient data. Demonstrates the feature/inference/explainability pipeline. Must not be used for clinical decision-making.",
+        "inputs_complete": false
       }
     },
     {
@@ -377,6 +481,58 @@
         "convergenceNotes": [
           "solver reported convergence at iteration 185"
         ]
+      },
+      "ml": {
+        "model_version": "lgbm-synth-v1",
+        "probability": 0.05743930117346684,
+        "risk_category": "Low",
+        "confidence": 0.8851213976530663,
+        "expected_value": -1.9372893534550164,
+        "shap": [
+          {
+            "feature": "non_sphericity_index",
+            "value": 0.0013,
+            "contribution": -0.5562127205822941
+          },
+          {
+            "feature": "rrt_sac",
+            "value": 7.412,
+            "contribution": 0.31874941306919724
+          },
+          {
+            "feature": "site_score",
+            "value": 0.0,
+            "contribution": -0.2509780772351988
+          },
+          {
+            "feature": "max_diameter_mm",
+            "value": 5.38,
+            "contribution": -0.14667544562756976
+          },
+          {
+            "feature": "ecap_sac",
+            "value": 0.0,
+            "contribution": -0.13176187485693572
+          },
+          {
+            "feature": "dome_to_neck",
+            "value": 1.11,
+            "contribution": 0.10843065167965532
+          },
+          {
+            "feature": "age",
+            "value": 49.0,
+            "contribution": -0.09967919300820018
+          },
+          {
+            "feature": "osi_sac",
+            "value": 0.0,
+            "contribution": -0.07549741874140563
+          }
+        ],
+        "cv_auc": 0.620251586145876,
+        "clinical_validity": "ILLUSTRATIVE ONLY. Not trained or validated on patient data. Demonstrates the feature/inference/explainability pipeline. Must not be used for clinical decision-making.",
+        "inputs_complete": false
       }
     }
   ]

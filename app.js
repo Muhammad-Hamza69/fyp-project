@@ -549,6 +549,9 @@ function loadPatientData(patient) {
     // PHASES Clinical Risk Score (demographic/morphological, independent of CFD sim)
     renderPhasesScore(patient);
 
+    // AI rupture prediction — a third, independent estimate
+    renderMlPrediction(patient);
+
     // 3D Nerve/Vascular Model Redraw (no-op until the 3D tab has been opened)
     if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(patient, currentMapMode);
 
@@ -571,6 +574,99 @@ function renderPhasesScore(patient) {
         </div>
     `).join("");
 }
+
+/**
+ * AI rupture-prediction card.
+ *
+ * A third, independent estimate beside the hemodynamic Composite Risk Index and
+ * the PHASES clinical score. Deliberately NOT folded into either: three
+ * estimates that can be compared are more informative than one blended number
+ * whose disagreements have been averaged away.
+ *
+ * The card is hidden entirely for cases with no prediction rather than shown
+ * with dashes — a permanently empty AI panel reads as a broken feature.
+ */
+function renderMlPrediction(patient) {
+    const card = document.getElementById("ml-card");
+    if (!card) return;
+
+    const ml = patient && patient.ml;
+    if (!ml) { card.classList.add("hidden"); return; }
+    card.classList.remove("hidden");
+
+    const pct = (ml.probability * 100).toFixed(1);
+    document.getElementById("ml-probability").textContent = `${pct}%`;
+
+    const catEl = document.getElementById("ml-category");
+    catEl.textContent = ml.risk_category || "—";
+    catEl.className = "ml-category " + ({
+        High: "tier-high", Moderate: "tier-mod", Low: "tier-low",
+    }[ml.risk_category] || "");
+
+    // Confidence is distance from the decision boundary, not the probability.
+    // A 0.545 output is maximally UNCERTAIN, not "moderately confident" —
+    // showing the probability alone would invite exactly that misreading.
+    document.getElementById("ml-confidence").textContent =
+        `${(ml.confidence * 100).toFixed(0)}%`;
+
+    // The model takes OSI as an input. On a steady solve OSI is absent rather
+    // than zero, so the vector is incomplete and the probability rests on a
+    // gap. Saying so beats presenting it as a finished number.
+    const inc = document.getElementById("ml-incomplete");
+    if (ml.inputs_complete === false) {
+        inc.classList.remove("hidden");
+        inc.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> '
+            + 'Incomplete input vector — OSI and ECAP were not computed for this '
+            + 'steady solve, so the model saw them as zero.';
+    } else {
+        inc.classList.add("hidden");
+    }
+
+    // SHAP contributions: signed, so the reader can see which features pushed
+    // the prediction up and which pulled it down, rather than a bare score.
+    const shap = Array.isArray(ml.shap) ? ml.shap.slice(0, 5) : [];
+    const maxAbs = Math.max(...shap.map(s => Math.abs(s.contribution)), 1e-6);
+    document.getElementById("ml-shap").innerHTML = shap.map(s => {
+        const w = (Math.abs(s.contribution) / maxAbs) * 100;
+        const up = s.contribution >= 0;
+        return `<div class="ml-shap-row">
+                  <span class="ml-shap-name">${SHAP_LABELS[s.feature] || s.feature}</span>
+                  <span class="ml-shap-bar-wrap">
+                    <span class="ml-shap-bar ${up ? "shap-up" : "shap-down"}"
+                          style="width:${w.toFixed(0)}%"></span>
+                  </span>
+                  <span class="ml-shap-val">${up ? "+" : ""}${s.contribution.toFixed(2)}</span>
+                </div>`;
+    }).join("");
+
+    // Never render a probability without this. The model is trained on a
+    // synthetic cohort, never on patient data.
+    const auc = (typeof ml.cv_auc === "number") ? ml.cv_auc.toFixed(2) : "—";
+    document.getElementById("ml-validity").innerHTML =
+        `<strong>Illustrative only.</strong> Model <code>${ml.model_version}</code> `
+        + `is trained on a <strong>synthetic</strong> cohort generated from published `
+        + `risk relationships — never on patient data. Cross-validated AUC ${auc}. `
+        + `It demonstrates the feature/inference/explainability pipeline and must not `
+        + `inform clinical decisions.`;
+}
+
+// Readable names for the model's feature vector.
+const SHAP_LABELS = {
+    tawss_sac_pa: "TAWSS (sac)",
+    osi_sac: "OSI (sac)",
+    rrt_sac: "RRT (sac)",
+    ecap_sac: "ECAP (sac)",
+    nwss: "Normalised WSS",
+    lsar_relative: "LSAR (relative)",
+    max_diameter_mm: "Max diameter",
+    aspect_ratio: "Aspect ratio",
+    dome_to_neck: "Dome-to-neck",
+    non_sphericity_index: "Non-sphericity",
+    age: "Age",
+    hypertension: "Hypertension",
+    earlier_sah: "Earlier SAH",
+    site_score: "Aneurysm site",
+};
 
 // 4. Color Normalization and Heatmap Drawing
 // Maps value between 1F5F99 (Stable Blue) and B83232 (High Risk Red)

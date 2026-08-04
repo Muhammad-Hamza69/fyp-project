@@ -222,8 +222,8 @@ The available hardware (6 physical cores, 16 GB RAM, 4 GB GPU) permits roughly o
 | 3D viewer — the **aneurysm sac** | **Real**: positioned at the case's recorded site, sized at true anatomical scale from measured morphology (dome, neck, aspect ratio), coloured by the computed field |
 | 3D viewer — the **vessel network around it** | **Generic anatomical asset.** Identical for every patient, not derived from any scan, shown for orientation. The panel states this on screen |
 | Aneurysm **anatomy** | **Idealised** — parametric, not patient-derived |
-| Automatic vessel segmentation | **Not implemented** |
-| AI / ML rupture prediction | **Not implemented** |
+| Automatic vessel segmentation | **Implemented, not exercised on these cases.** `imaging.py` provides DICOM validation, SNR/CNR/motion QA, Frangi/Hessian multi-scale vesselness, region growing and Dice/Hausdorff validation. The cohort geometries are parametric, so nothing was segmented to produce them |
+| AI / ML rupture prediction | **Implemented — illustrative only.** LightGBM with exact-tree SHAP, three separable stages (feature extraction → inference → composite). Trained on a **synthetic** cohort from published risk relationships, never on patient data; cross-validated AUC 0.62. Shown on the dashboard and in the report, always with that caveat |
 | Cloud backend, auth, job queue | **Not implemented** (storage provisioned only) |
 | The 6-step upload animation in the UI | **Still a scripted visualisation** |
 

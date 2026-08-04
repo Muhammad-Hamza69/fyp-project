@@ -224,10 +224,21 @@ def _page_analysis(pdf: PdfPages, rec: dict[str, Any], ai: dict[str, Any] | None
         ax.axvline(0, color="#94a3b8", lw=0.8)
         ax.set_xlabel("SHAP contribution to log-odds of rupture", fontsize=8)
         ax.set_title(f"Model explainability — {ai.get('model_version','')} "
-                     f"(p = {ai.get('probability',0):.3f}, {ai.get('risk_category','')})",
+                     f"(p = {ai.get('probability',0):.3f}, {ai.get('risk_category','')}, "
+                     f"confidence {ai.get('confidence', 0)*100:.0f}%)",
                      fontsize=9.5, pad=8)
         ax.tick_params(labelsize=7.5)
         for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+
+        # OSI and ECAP are inputs to this model. On a steady solve they are
+        # absent rather than zero, so the probability rests on a feature vector
+        # with two holes in it — and the model was handed zeros for both, which
+        # is a value, not a gap. That has to travel with the number.
+        if ai.get("inputs_complete") is False:
+            ax.text(0, -0.34,
+                    "Incomplete input vector: OSI and ECAP were not computed for this "
+                    "steady solve and entered the model as zero.",
+                    transform=ax.transAxes, fontsize=6.8, color=C_MOD)
     else:
         ax.axis("off")
         ax.text(0.5, 0.5, "No model prediction available for this case",

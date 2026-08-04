@@ -100,6 +100,53 @@ def main() -> int:
         print("no cases processed")
         return 1
 
+    # --- AI risk prediction, attached to the RECORD ------------------------
+    #
+    # This used to run further down, inside the reports branch, and its result
+    # was handed only to generate_report(). Two consequences: the prediction
+    # never reached real-cfd-patients.json — so the dashboard could not show it
+    # however complete the model was — and `--skip-reports` silently skipped
+    # the inference too. The three AI stages are separate for a reason
+    # (deterministic features, a versioned model, a transparent composite), so
+    # feature extraction and inference belong here, before anything is written.
+    ai_by_id: dict[str, dict[str, Any]] = {}
+    try:
+        from risk_model import extract_features, predict          # type: ignore
+
+        for r in records:
+            dome = next(z for z in r["zones"] if "Dome" in z["name"])
+            h = r["hemodynamics"]
+            feats = extract_features(
+                {"zones": [{"id": "dome", "tawss": dome["tawss"], "osi": dome["osi"],
+                            "rrt": h.get("rrt", 0), "ecap": h.get("ecap", 0)}],
+                 "nwss": h.get("nwss", 0),
+                 "lsar_relative": h.get("lsarRelative", 0)},
+                r["morphology"], r["demographics"])
+            try:
+                ai = predict(feats, _HERE / "models")
+            except Exception as exc:  # noqa: BLE001
+                # Reported, not swallowed. The previous `except: pass` meant a
+                # broken or missing model artifact looked exactly like a case
+                # with no AI stage — the dashboard simply showed nothing, and
+                # nothing anywhere said why.
+                print(f"!! {r['id']}: AI prediction failed: "
+                      f"{exc.__class__.__name__}: {exc}", flush=True)
+                continue
+
+            # OSI feeds the model. On a steady solve it is not zero-because-
+            # measured but zero-because-absent, and the prediction inherits
+            # that gap — so the record says so rather than letting a number
+            # built on a missing input pass as a complete one.
+            ai["inputs_complete"] = bool(h.get("transient", True))
+            r["ml"] = ai
+            ai_by_id[r["id"]] = ai
+
+        n = len(ai_by_id)
+        print(f"AI prediction: {n}/{len(records)} case(s)"
+              + (f", model {next(iter(ai_by_id.values()))['model_version']}" if n else ""))
+    except Exception as exc:  # noqa: BLE001
+        print(f"(AI stage unavailable: {exc.__class__.__name__}: {exc})")
+
     PATIENTS_JSON.write_text(json.dumps({
         "generatedAt": datetime.now().isoformat(timespec="seconds"),
         "pipeline": "NeuroFlow CFD worker — geometry → snappyHexMesh → OpenFOAM → hemodynamic engine",
@@ -110,23 +157,12 @@ def main() -> int:
     if not args.skip_reports:
         try:
             from report import generate_report          # type: ignore
-            from risk_model import extract_features, predict  # type: ignore
             REPORTS_DIR.mkdir(parents=True, exist_ok=True)
             for r in records:
-                ai = None
-                try:
-                    feats = extract_features(
-                        {"zones": [{"id": "dome", "tawss": r["zones"][3]["tawss"],
-                                    "osi": r["zones"][3]["osi"],
-                                    "rrt": r["hemodynamics"].get("rrt", 0),
-                                    "ecap": r["hemodynamics"].get("ecap", 0)}],
-                         "nwss": r["hemodynamics"].get("nwss", 0),
-                         "lsar_relative": r["hemodynamics"].get("lsarRelative", 0)},
-                        r["morphology"], r["demographics"])
-                    ai = predict(feats, _HERE / "models")
-                except Exception:
-                    pass
-                generate_report(r, REPORTS_DIR / f"{r['id']}.pdf", ai)
+                # Reuses the prediction computed above rather than running
+                # inference a second time, so the PDF and the dashboard cannot
+                # disagree about the same case.
+                generate_report(r, REPORTS_DIR / f"{r['id']}.pdf", ai_by_id.get(r["id"]))
             print(f"wrote {len(records)} report(s) to {REPORTS_DIR}")
         except Exception as exc:  # noqa: BLE001
             print(f"(reports skipped: {exc})")

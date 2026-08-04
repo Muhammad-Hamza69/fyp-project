@@ -377,6 +377,46 @@
                         <p class="phases-card-note">Demographic &amp; morphological score (Greving et al., PHASES) &mdash;
                             used alongside, not instead of, the hemodynamic Composite Risk Index above.</p>
                     </div>
+
+                    <!--
+                        Machine-learning rupture prediction. A third, independent
+                        estimate alongside the hemodynamic Composite Risk Index and
+                        the PHASES clinical score — deliberately not merged with
+                        them, so a reader can see where the three agree and where
+                        they do not.
+
+                        The validity banner is not boilerplate: this model is
+                        trained on a SYNTHETIC cohort generated from published risk
+                        relationships, never on patient data. It demonstrates the
+                        feature -> inference -> explainability pipeline. Presenting
+                        a probability without that context would be the single most
+                        misleading thing on this page.
+                    -->
+                    <div class="card metric-card ml-card" id="ml-card">
+                        <h3 class="card-title">AI Rupture Prediction</h3>
+
+                        <div class="ml-score-row">
+                            <div class="ml-prob-wrap">
+                                <span id="ml-probability" class="ml-prob">&mdash;</span>
+                                <span class="ml-prob-label">Rupture probability</span>
+                            </div>
+                            <div class="ml-conf-wrap">
+                                <span id="ml-category" class="ml-category">&mdash;</span>
+                                <span class="ml-conf-label">
+                                    confidence <span id="ml-confidence">&mdash;</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Warns when the model ran on an incomplete feature
+                             vector (OSI absent on a steady solve). -->
+                        <div id="ml-incomplete" class="ml-incomplete hidden"></div>
+
+                        <div class="ml-shap-title">Top contributing features (SHAP)</div>
+                        <div class="ml-shap" id="ml-shap"></div>
+
+                        <p class="ml-validity" id="ml-validity"></p>
+                    </div>
             </section>
         </div>
 

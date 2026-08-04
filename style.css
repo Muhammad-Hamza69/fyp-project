@@ -517,6 +517,118 @@ body {
     display: none;
 }
 
+/* ---- AI rupture prediction card ------------------------------------------
+   A third, independent estimate beside the Composite Risk Index and PHASES.
+   Styled to sit level with them, NOT to dominate: it is the least validated of
+   the three (synthetic training data), so it must not look the most
+   authoritative. */
+.ml-card.hidden {
+    display: none;
+}
+
+.ml-score-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 4px 0 10px;
+}
+
+.ml-prob {
+    display: block;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.05;
+    color: var(--text-primary);
+}
+
+.ml-prob-label,
+.ml-conf-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.ml-conf-wrap {
+    text-align: right;
+}
+
+.ml-category {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.ml-category.tier-high { color: var(--color-high-risk); }
+.ml-category.tier-mod  { color: var(--color-mod-risk); }
+.ml-category.tier-low  { color: var(--color-low-risk); }
+
+.ml-incomplete {
+    margin-bottom: 9px;
+    padding: 6px 8px;
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    background-color: rgba(184, 134, 11, 0.10);
+    border-left: 3px solid var(--color-mod-risk, #B8860B);
+    border-radius: 3px;
+}
+
+.ml-incomplete.hidden {
+    display: none;
+}
+
+.ml-shap-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+}
+
+.ml-shap-row {
+    display: grid;
+    grid-template-columns: 1fr 62px 40px;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-bottom: 3px;
+}
+
+.ml-shap-bar-wrap {
+    height: 6px;
+    background-color: rgba(148, 163, 184, 0.22);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.ml-shap-bar {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+}
+
+/* Signed: red pushes the prediction up, blue pulls it down. Without the sign a
+   SHAP chart looks like plain feature importance, which is a different claim. */
+.shap-up   { background-color: var(--color-high-risk); }
+.shap-down { background-color: var(--color-low-risk); }
+
+.ml-shap-val {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ml-validity {
+    margin-top: 9px;
+    font-size: 9.5px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.ml-validity code {
+    font-size: 9px;
+}
+
 /* A quantity that was never computed, shown as "n/a". Deliberately muted: it
    must not read as a value on the scale, and 0.00 (which this replaces) is the
    most reassuring value the OSI and ECAP scales have. */
