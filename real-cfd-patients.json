@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T18:02:47",
+  "generatedAt": "2026-08-05T08:15:24",
   "pipeline": "NeuroFlow CFD worker \u2014 geometry \u2192 snappyHexMesh \u2192 OpenFOAM \u2192 hemodynamic engine",
   "patients": [
     {
@@ -381,7 +381,7 @@
           "x": 160,
           "y": 278,
           "radius": 55,
-          "tawss": 2.9729,
+          "tawss": 2.9394,
           "osi": 0.0,
           "isAneurysm": false
         },
@@ -391,7 +391,7 @@
           "x": 470,
           "y": 278,
           "radius": 55,
-          "tawss": 2.7351,
+          "tawss": 2.7043,
           "osi": 0.0,
           "isAneurysm": false
         },
@@ -401,8 +401,8 @@
           "x": 320,
           "y": 220,
           "radius": 35,
-          "tawss": 0.6427,
-          "osi": 0.0,
+          "tawss": 0.6598,
+          "osi": 0.0105,
           "isAneurysm": true
         },
         {
@@ -411,50 +411,50 @@
           "x": 320,
           "y": 120,
           "radius": 50,
-          "tawss": 0.3339,
-          "osi": 0.0,
+          "tawss": 0.3459,
+          "osi": 0.0084,
           "isAneurysm": true
         }
       ],
       "hemodynamics": {
-        "lsarRelative": 0.7245,
-        "lsarAbsolute": 0.7863,
-        "nwss": 0.1123,
-        "rrt": 7.412,
-        "ecap": 0.0,
-        "wssMaxPa": 28.263,
-        "wssMinPa": 0.0039,
-        "rrtAreaWeighted": 7.412,
-        "rrtFromMeans": 2.995,
-        "ecapAreaWeighted": 0.0,
-        "ecapFromMeans": 0.0,
-        "transWssPa": 0.0,
-        "wssgPaPerMm": 0.4487,
-        "afi": 1.0,
+        "lsarRelative": 0.7126,
+        "lsarAbsolute": 0.7831,
+        "nwss": 0.1177,
+        "rrt": 7.167,
+        "ecap": 0.1734,
+        "wssMaxPa": 27.463,
+        "wssMinPa": 0.0152,
+        "rrtAreaWeighted": 7.167,
+        "rrtFromMeans": 2.94,
+        "ecapAreaWeighted": 0.1734,
+        "ecapFromMeans": 0.0242,
+        "transWssPa": 0.0021,
+        "wssgPaPerMm": 0.4425,
+        "afi": 0.9833,
         "gon": 0.0,
-        "lsa": 0.7245,
+        "lsa": 0.7126,
         "hsa": 0.0,
         "sci": 0.0,
         "ici": 0.0,
-        "ker": 0.1,
-        "vdr": 0.1732,
-        "plc": 7.794,
-        "vortexVolumeFraction": 0.4345,
-        "reynolds": 456.4,
+        "ker": 0.1014,
+        "vdr": 0.172,
+        "plc": 8.767,
+        "vortexVolumeFraction": 0.4344,
+        "reynolds": 416.7,
         "womersley": 3.09,
-        "meanVelocityMs": 0.354,
-        "wssStdPa": 0.4882,
-        "transient": false
+        "meanVelocityMs": 0.3232,
+        "wssStdPa": 0.4915,
+        "transient": true
       },
       "riskBreakdown": {
-        "tawssScore": 86.37657547165941,
+        "tawssScore": 85.48877978964352,
         "osiScore": 0.0,
         "diameterScore": 42.21857935190201,
         "aspectScore": 3.0258156585585283,
         "composite": 39
       },
       "riskTier": "Low",
-      "clinicalAssessment": "Computational fluid dynamics analysis of case PT-2026-0103. Time-averaged wall shear stress at the aneurysm dome measured 0.334 Pa against 2.973 Pa in the parent artery (normalised WSS 0.112), with an oscillatory shear index of 0.000. 72.4% of the sac surface lies below 10% of the parent-artery shear (LSAR). Relative residence time at the dome is 7.41 Pa^-1. Sac morphology measured from the reconstructed surface: maximum diameter 5.38 mm, neck 4.83 mm, aspect ratio 0.75, volume 63.4 mm^3. Composite Risk Index 39/100 (Low).",
+      "clinicalAssessment": "Computational fluid dynamics analysis of case PT-2026-0103. Time-averaged wall shear stress at the aneurysm dome measured 0.346 Pa against 2.939 Pa in the parent artery (normalised WSS 0.118), with an oscillatory shear index of 0.008. 71.3% of the sac surface lies below 10% of the parent-artery shear (LSAR). Relative residence time at the dome is 7.17 Pa^-1. Sac morphology measured from the reconstructed surface: maximum diameter 5.38 mm, neck 4.83 mm, aspect ratio 0.75, volume 63.4 mm^3. Composite Risk Index 39/100 (Low).",
       "provenance": {
         "source": "computed",
         "solver": "OpenFOAM ESI v2412",
@@ -467,72 +467,72 @@
         "bloodDensityKgM3": 1060.0,
         "kinematicViscosityM2S": 3.302e-06,
         "note": "WSS converted from OpenFOAM kinematic units (m^2/s^2) to Pascals by multiplying by rho = 1060.0. Validated against the analytic Poiseuille solution tau = 4*mu*Q/(pi*r^3).",
-        "convergenceState": "CONVERGED",
+        "convergenceState": "OSCILLATING",
         "convergenceTrustworthy": true,
         "massConserved": true,
-        "continuityError": -1.2782762e-08,
-        "solverIterations": 185,
+        "continuityError": -2.701837e-12,
+        "solverIterations": 4276,
         "residualsFinal": {
-          "Ux": 2.059226e-08,
-          "Uy": 4.5166707e-07,
-          "Uz": 7.7221709e-07,
-          "p": 2.6559866e-08
+          "Ux": 2.8241369e-07,
+          "Uy": 4.8424826e-06,
+          "Uz": 6.9424838e-06,
+          "p": 6.3302067e-07
         },
         "convergenceNotes": [
-          "solver reported convergence at iteration 185"
+          "transient solver: per-timestep residuals are expected to oscillate; convergence is judged per timestep, not across the run"
         ]
       },
       "ml": {
         "model_version": "lgbm-synth-v1",
-        "probability": 0.05743930117346684,
+        "probability": 0.06202346168457817,
         "risk_category": "Low",
-        "confidence": 0.8851213976530663,
+        "confidence": 0.8759530766308437,
         "expected_value": -1.9372893534550164,
         "shap": [
           {
             "feature": "non_sphericity_index",
             "value": 0.0013,
-            "contribution": -0.5562127205822941
+            "contribution": -0.6476225014077092
           },
           {
             "feature": "rrt_sac",
-            "value": 7.412,
-            "contribution": 0.31874941306919724
+            "value": 7.167,
+            "contribution": 0.3302959100984264
           },
           {
             "feature": "site_score",
             "value": 0.0,
-            "contribution": -0.2509780772351988
-          },
-          {
-            "feature": "max_diameter_mm",
-            "value": 5.38,
-            "contribution": -0.14667544562756976
-          },
-          {
-            "feature": "ecap_sac",
-            "value": 0.0,
-            "contribution": -0.13176187485693572
+            "contribution": -0.23093432102297223
           },
           {
             "feature": "dome_to_neck",
             "value": 1.11,
-            "contribution": 0.10843065167965532
+            "contribution": 0.12110834947172154
+          },
+          {
+            "feature": "max_diameter_mm",
+            "value": 5.38,
+            "contribution": -0.11878204161883772
           },
           {
             "feature": "age",
             "value": 49.0,
-            "contribution": -0.09967919300820018
+            "contribution": -0.09987782917328626
           },
           {
-            "feature": "osi_sac",
-            "value": 0.0,
-            "contribution": -0.07549741874140563
+            "feature": "lsar_relative",
+            "value": 0.7126,
+            "contribution": -0.09218471175619823
+          },
+          {
+            "feature": "ecap_sac",
+            "value": 0.1734,
+            "contribution": -0.04563893249016494
           }
         ],
         "cv_auc": 0.620251586145876,
         "clinical_validity": "ILLUSTRATIVE ONLY. Not trained or validated on patient data. Demonstrates the feature/inference/explainability pipeline. Must not be used for clinical decision-making.",
-        "inputs_complete": false
+        "inputs_complete": true
       }
     }
   ]

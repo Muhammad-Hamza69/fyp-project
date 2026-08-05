@@ -5,17 +5,17 @@
   "faces_before": 64909,
   "faces_after": 39999,
   "vertices": 20078,
-  "tawss_min_pa": 0.005135361233820125,
-  "tawss_max_pa": 28.263465515005787,
-  "tawss_mean_pa": 2.8356983879604782,
+  "tawss_min_pa": 0.020230098634783644,
+  "tawss_max_pa": 27.463201470673084,
+  "tawss_mean_pa": 2.8073886695917993,
   "tawss_mean_basis": "area-weighted over full-resolution wall patches",
-  "wall_area_mm2": 1292.8654986558959,
-  "baked_min_pa": 0.005135361233820125,
-  "baked_max_pa": 28.263465515005787,
-  "scale_m_per_unit": 0.05000904181998146,
+  "wall_area_mm2": 1292.8654986969534,
+  "baked_min_pa": 0.020230098634783644,
+  "baked_max_pa": 27.463201470673084,
+  "scale_m_per_unit": 0.051147250084800616,
   "centre_m": [
-    0.04989095052678215,
-    0.0006260703077362187,
-    2.1460017140769796e-05
+    0.05126827404183612,
+    0.0006876575402421134,
+    7.281132668228857e-05
   ]
 }
