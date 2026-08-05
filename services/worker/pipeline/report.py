@@ -28,7 +28,10 @@ from matplotlib.backends.backend_pdf import PdfPages
 C_HIGH, C_MOD, C_LOW = "#B83232", "#C47D1A", "#1E8C4E"
 C_TEXT, C_MUTED, C_ACCENT = "#1e293b", "#64748b", "#2563eb"
 
-THRESHOLDS = {"TAWSS_LOW_PA": 0.4, "OSI_HIGH": 0.2, "RRT_HIGH": 3.0, "ECAP_HIGH": 1.0}
+# Mirrors thresholds.js. OSI_HIGH is 0.030, not 0.2: the reported value is an
+# area-weighted sac mean and 0.2 is a peak-OSI figure, so the report could
+# never flag a case no matter what the solve produced.
+THRESHOLDS = {"TAWSS_LOW_PA": 0.4, "OSI_HIGH": 0.030, "RRT_HIGH": 3.0, "ECAP_HIGH": 1.0}
 
 
 def _tier_colour(tier: str) -> str:

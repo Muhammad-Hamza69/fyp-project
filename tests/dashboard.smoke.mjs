@@ -63,13 +63,19 @@ const ctxStub = new Proxy({}, {
 });
 window.HTMLCanvasElement.prototype.getContext = () => ctxStub;
 
-// Serve the computed cases the way the page fetches them.
-window.fetch = async (url) => ({
-    ok: true,
-    status: 200,
-    json: async () => (String(url).includes("real-cfd-patients") ? patients : {}),
-    text: async () => "",
-});
+// Serve the computed cases and the fitted surrogate the way the page fetches
+// them. The surrogate has to be the REAL model file: the curated cases derive
+// their hemodynamics from it at startup, so stubbing it empty leaves them
+// holding authored values and the assertions about that pass vacuously.
+const surrogateModel = JSON.parse(
+    readFileSync(resolve(ROOT, "models/surrogate.json"), "utf8"));
+window.fetch = async (url) => {
+    const u = String(url);
+    const body = u.includes("real-cfd-patients") ? patients
+               : u.includes("surrogate.json") ? surrogateModel
+               : {};
+    return { ok: true, status: 200, json: async () => body, text: async () => "" };
+};
 
 // Record anything thrown asynchronously or logged as an error — a listener that
 // throws on click fails silently otherwise.
@@ -89,6 +95,13 @@ window.addEventListener("error", (e) => record(e.error || e.message));
 window.console.error = (...a) => record(a.map(String).join(" "));
 
 // --- execute the page -------------------------------------------------------
+// thresholds.js first, exactly as index.html orders it: app.js reads
+// window.NeuroThresholds at module scope, so loading it second throws.
+window.eval(readFileSync(resolve(ROOT, "thresholds.js"), "utf8"));
+// surrogate.js next: app.js calls it during initialisation to derive the
+// curated cases' hemodynamics, and skipping it silently disables that path.
+window.eval(readFileSync(resolve(ROOT, "surrogate.js"), "utf8"));
+
 try {
     window.eval(appJs);
 } catch (err) {
@@ -195,6 +208,123 @@ if (cards.length) {
           errors.length === before, errors.slice(before).join("\n          "));
     check("gauges still populated after switching",
           (txt("rrt-gauge-val") || "") !== "" && (txt("phases-total-points") || "") !== "");
+}
+
+// --- every displayed number must respond to the case -----------------------
+//
+// The complaint that produced this block was that OSI, ECAP and the Composite
+// Risk Index looked hardcoded. Three separate causes, all real:
+//
+//   1. The OSI risk band ran 0.03 -> 0.35, taken from the curated cases'
+//      AUTHORED OSI values. Every physical solve lands at 0.008-0.015, below
+//      the floor, so clamp01 pinned the term to exactly 0 — permanently, for
+//      every case. A quantity carrying 30% of the composite weight contributed
+//      nothing at all.
+//   2. OSI and ECAP printed at two decimals. The real spread (OSI 0.008-0.015,
+//      ECAP 0.037-0.045) collapses to "0.01" and "0.04" at that precision, so a
+//      computed value was rendered indistinguishable from a literal.
+//   3. The OSI progress ring was scaled over OSI's theoretical 0-0.5 range, in
+//      which a real sac value fills 2.4% — the same empty ring on every case.
+//
+// None of this was caught because nothing asserted that a band was REACHABLE.
+// A threshold no input can cross is not a strict test; it is a dead one, and it
+// fails silently and permanently. These checks fail loudly instead.
+{
+    const T = window.NeuroThresholds;
+    check("thresholds are shared, not duplicated per file", !!T && !!T.band);
+
+    // The band must bracket the values the solver actually produces. Solved
+    // area-weighted sac OSI: 0.0096, 0.0124, 0.0130.
+    const SOLVED_OSI = [0.0096, 0.0124, 0.0130];
+    for (const osi of SOLVED_OSI) {
+        const f = T.band(osi, T.OSI_RISK_LOW, T.OSI_RISK_HIGH);
+        check(`OSI ${osi} scores inside the band, not clamped to an endpoint`,
+              f > 0.01 && f < 0.99, `normalised to ${f.toFixed(3)}`);
+    }
+
+    // Two different geometries must not produce the same risk score. This is
+    // the user-visible claim: upload a different file, get different numbers.
+    const S = window.NeuroSurrogate;
+    if (S && S.isLoaded()) {
+        const seen = new Map();
+        for (const dome of [4.0, 6.0, 8.0, 10.0]) {
+            const p = S.predict({ maxDiameterMm: dome, neckDiameterMm: dome * 0.8 });
+            const osiScore = T.band(p.osi, T.OSI_RISK_LOW, T.OSI_RISK_HIGH);
+            seen.set(dome, { osi: p.osi, ecap: p.ecap, osiScore });
+        }
+        const osis = [...seen.values()].map((v) => +v.osi.toFixed(3));
+        check("OSI differs between geometries at the displayed precision",
+              new Set(osis).size > 1, `3dp OSI values: ${osis.join(", ")}`);
+
+        const scores = [...seen.values()].map((v) => v.osiScore);
+        check("the OSI risk term is non-zero for real geometries",
+              scores.every((x) => x > 0), `normalised: ${scores.map((x) => x.toFixed(3)).join(", ")}`);
+        check("the OSI risk term varies with geometry",
+              Math.max(...scores) - Math.min(...scores) > 0.05,
+              `spread ${(Math.max(...scores) - Math.min(...scores)).toFixed(3)}`);
+    }
+
+    // Gauge precision. "0.01" is two decimals; the value must carry three.
+    const osiTxt = (txt("osi-gauge-val") || "").replace("~", "");
+    if (osiTxt && osiTxt !== "n/a") {
+        const decimals = (osiTxt.split(".")[1] || "").length;
+        check("OSI gauge shows 3 decimals, not 2", decimals >= 3, `showing "${osiTxt}"`);
+    }
+    const ecapTxt = (txt("ecap-gauge-val") || "").replace("~", "");
+    if (ecapTxt && ecapTxt !== "n/a") {
+        const decimals = (ecapTxt.split(".")[1] || "").length;
+        check("ECAP gauge shows 3 decimals, not 2", decimals >= 3, `showing "${ecapTxt}"`);
+    }
+}
+
+// --- no case may still be showing authored hemodynamics --------------------
+//
+// The curated cases' TAWSS and OSI were hand-written. They were also what the
+// OSI risk band had been calibrated against, so one set of invented numbers
+// disabled a third of the risk model for every real case. Each now derives its
+// hemodynamics from the same surrogate an upload uses, which is what makes it
+// correct to drop the DEMO / CFD / EST badges from the cards rather than a way
+// of hiding the difference.
+{
+    const db = window.__neuroCases || {};
+    check("the case database is reachable (else everything below is vacuous)",
+          Object.keys(db).length >= 3, `${Object.keys(db).length} case(s)`);
+    const authored = Object.values(db).filter((p) => !p.provenance && !p.estimated);
+    check("no case carries authored hemodynamics",
+          authored.length === 0,
+          `still authored: ${authored.map((p) => p.id).join(", ")}`);
+
+    // The old values, which must not survive anywhere.
+    const FICTION = [0.38, 0.32, 0.24, 0.22, 0.12, 0.08];
+    const stale = [];
+    for (const p of Object.values(db)) {
+        for (const z of p.zones || []) {
+            if (FICTION.includes(+(z.osi || 0).toFixed(2)) && z.osi > 0.05) {
+                stale.push(`${p.id}/${z.name}=${z.osi}`);
+            }
+        }
+    }
+    check("no zone still holds an authored OSI value", stale.length === 0, stale.join(", "));
+
+    // And the prose must not quote numbers the gauges no longer show.
+    const mismatched = [];
+    for (const p of Object.values(db)) {
+        const dome = (p.zones || []).find((z) => z.name === "Aneurysm Dome");
+        if (!dome || !p.clinicalAssessment) continue;
+        const m = p.clinicalAssessment.match(/OSI\s*=\s*([0-9.]+)/);
+        if (m && Math.abs(parseFloat(m[1]) - dome.osi) > 0.005) {
+            mismatched.push(`${p.id}: prose ${m[1]} vs gauge ${dome.osi.toFixed(4)}`);
+        }
+    }
+    check("written assessments agree with the displayed OSI",
+          mismatched.length === 0, mismatched.join("; "));
+}
+
+// --- provenance badges are gone from the cards ------------------------------
+{
+    const badges = window.document.querySelectorAll(".patient-card .provenance-badge");
+    check("patient cards carry no provenance badge", badges.length === 0,
+          `${badges.length} badge(s) still rendered`);
 }
 
 // --- RRT / ECAP must match the solver, not be recomputed from means ---------

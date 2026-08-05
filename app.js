@@ -122,14 +122,26 @@ function clamp01(v) {
     return Math.max(0, Math.min(1, v));
 }
 
+// Thresholds live in thresholds.js — one definition shared with the heatmap,
+// the 3D viewer and the report, so they cannot drift apart again. See that file
+// for why the OSI band moved off the curated cases' authored values.
+const THRESHOLDS = window.NeuroThresholds;
+const OSI_RISK_LOW = THRESHOLDS.OSI_RISK_LOW;
+const OSI_RISK_HIGH = THRESHOLDS.OSI_RISK_HIGH;
+const OSI_ELEVATED = THRESHOLDS.OSI_ELEVATED;
+
 /**
  * Was this case solved over a cardiac cycle?
  *
  * OSI, ECAP, transWSS, AFI and GON are all cycle quantities — they are not
  * merely small on a steady solve, they are undefined. The worker records the
- * distinction as `hemodynamics.transient`. Demonstration cases carry no
- * hemodynamics block and their OSI values are curated, so they are treated as
- * available: the DEMO badge already tells the reader what they are.
+ * distinction as `hemodynamics.transient`.
+ *
+ * The curated cases used to be a third case here: no hemodynamics block, so
+ * treated as available, on the grounds that their OSI values were authored and
+ * the DEMO badge said so. Both halves of that are gone — they now derive their
+ * hemodynamics from the surrogate like everything else, and carry a proper
+ * `transient` flag, so there is nothing special to allow for.
  */
 /**
  * Attach (or clear) a short explanatory note under a gauge value.
@@ -181,9 +193,19 @@ function setGaugeNote(valueEl, text) {
  *
  * Returned separately from the measured values, never merged into them: the
  * gauges mark an estimate distinctly so nobody reads it as a solve result. The
- * Composite Risk Index is deliberately NOT recomputed from it — and it happens
- * not to matter, because every estimate this produces (~0.005-0.013) sits below
- * the 0.03 floor of the OSI risk normalisation and would score zero anyway.
+ * Composite Risk Index is deliberately NOT recomputed from it.
+ *
+ * That used to be free — the old OSI risk band started at 0.03, above every
+ * value this produces, so folding the estimate in would have scored zero
+ * anyway. With the band recalibrated to the range solves actually occupy
+ * (0.002-0.030) it is no longer free: an estimate of 0.010 now scores 29% and
+ * would move the composite by roughly 9 points. Holding the line is therefore
+ * a real choice rather than a no-op, and it is the right one for a case that
+ * WAS solved: the honest statement about PT-2026-0102 is that its cycle was
+ * never run, so its index is a lower bound, not that a surrogate stood in for
+ * the solve. Uploaded cases are different and are not affected — their OSI is
+ * the surrogate's by construction and sits in their zones, so the index reads
+ * it directly.
  */
 function estimateOsi(patient) {
     if (!patient || !window.NeuroSurrogate || !window.NeuroSurrogate.isLoaded()) return null;
@@ -225,7 +247,8 @@ function computeRiskBreakdown(patient) {
     const { maxDiameter, aspectRatio } = patient.morphology;
 
     const tawssScore = clamp01((1.5 - domeZone.tawss) / (1.5 - 0.15)) * 100;
-    const osiScore = clamp01((domeZone.osi - 0.03) / (0.35 - 0.03)) * 100;
+    const osiScore = clamp01((domeZone.osi - OSI_RISK_LOW)
+                             / (OSI_RISK_HIGH - OSI_RISK_LOW)) * 100;
     const diameterScore = clamp01((maxDiameter - 2.0) / (10.0 - 2.0)) * 100;
     const aspectScore = clamp01((aspectRatio - 0.7) / (2.5 - 0.7)) * 100;
 
@@ -559,6 +582,100 @@ async function loadRealCfdCases() {
     return cases.length;
 }
 
+/**
+ * Replace the curated cases' AUTHORED hemodynamics with surrogate predictions
+ * from their own stated geometry.
+ *
+ * WHY THIS HAD TO HAPPEN
+ * PT-2025-0041/0037/0039 shipped with hand-written TAWSS and OSI values. They
+ * were never solved and never measured, and they did real damage beyond simply
+ * being fiction: because they were the only cases in the app when the Composite
+ * Risk Index was written, the index's OSI band was calibrated to THEM. Their
+ * dome OSI of 0.08-0.38 set a floor of 0.03, which no physical solve reaches,
+ * and the 30%-weighted OSI term was consequently dead for every real case. One
+ * set of invented numbers silently disabled a third of the risk model.
+ *
+ * WHAT REPLACES THEM
+ * Their morphology — dome diameter and aspect ratio — is the part that was
+ * always self-consistent, so it is kept and fed to the same surrogate that
+ * serves uploads. Every case in the app now derives its hemodynamics from the
+ * same response surface fitted to real OpenFOAM solutions, which is also what
+ * makes it correct to stop labelling them differently in the UI: the
+ * distinction the DEMO badge marked no longer exists.
+ *
+ * The written assessment is regenerated too. Leaving prose that quotes
+ * "TAWSS = 0.18 Pa, OSI = 0.38" beside a gauge showing something else is worse
+ * than either number alone.
+ */
+function deriveCuratedHemodynamics() {
+    if (!window.NeuroSurrogate || !window.NeuroSurrogate.isLoaded()) return 0;
+
+    let n = 0;
+    for (const patient of Object.values(patientDatabase)) {
+        // Only the authored cases. Anything solved or uploaded already carries
+        // its own provenance and must not be overwritten.
+        if (patient.provenance || patient.estimated) continue;
+
+        const m = patient.morphology || {};
+        const dome = Number(m.maxDiameter);
+        const ar = Number(m.aspectRatio);
+        if (!(dome > 0)) continue;
+
+        // The app's aspect ratio is dome height over neck width, so the neck
+        // follows from the two numbers already on the case rather than being
+        // invented alongside them.
+        const neck = ar > 0 ? dome / ar : dome * 0.75;
+
+        let p;
+        try {
+            p = window.NeuroSurrogate.predict({
+                maxDiameterMm: dome,
+                neckDiameterMm: neck,
+                aspectRatio: ar,
+            });
+        } catch { continue; }
+
+        m.neckDiameterMm = +neck.toFixed(2);
+        patient.zones = window.NeuroSurrogate.toZones(p);
+        patient.hemodynamics = {
+            // OSI comes from the transient calibration, so it is available in
+            // the same sense it is for an upload — and gated the same way.
+            transient: p.osi !== null && p.osi !== undefined,
+            nwss: p.nwss,
+            rrt: p.rrt,
+            lsarRelative: p.lsarRelative,
+            ecap: p.ecap,
+        };
+        patient.estimated = true;
+        patient.provenance = {
+            source: "surrogate",
+            solver: `surrogate fitted to ${p.calibrationPoints} OpenFOAM solutions`,
+            convergence: "response surface, evaluated in microseconds",
+        };
+        patient.clinicalAssessment =
+            `Hemodynamics for ${patient.id} are ESTIMATED from its recorded `
+            + `morphology by a response surface fitted to ${p.calibrationPoints} full `
+            + `OpenFOAM solutions; this geometry was not itself solved. Sac TAWSS `
+            + `${p.sacTawss.toFixed(3)} Pa against a parent artery of `
+            + `${p.parentTawss.toFixed(2)} Pa (normalised WSS ${p.nwss.toFixed(3)}), `
+            + `relative residence time ${p.rrt.toFixed(2)} Pa^-1`
+            + (p.osi !== null && p.osi !== undefined
+                ? `, dome OSI ${p.osi.toFixed(4)} and ECAP ${p.ecap.toFixed(4)} from the `
+                  + `transient calibration`
+                : `; OSI and ECAP are not reported, as too few transient solves exist to `
+                  + `calibrate them`)
+            + `. Derived from a ${dome.toFixed(1)} mm dome at aspect ratio `
+            + `${ar.toFixed(1)}. `
+            + (p.extrapolating
+                ? `NOTE: this geometry lies outside the calibrated range, so the estimate `
+                  + `is an extrapolation. `
+                : ``)
+            + `Confirm with a full transient solve before drawing conclusions.`;
+        n += 1;
+    }
+    return n;
+}
+
 // Initialize Application
 async function initApp() {
     const nReal = await loadRealCfdCases();
@@ -572,6 +689,17 @@ async function initApp() {
             console.warn("[NeuroFlow] surrogate unavailable:", err.message);
         }
     }
+
+    // After the surrogate loads and before anything renders: the curated cases
+    // must not be drawn with their authored numbers even once.
+    const nDerived = deriveCuratedHemodynamics();
+
+    // Test seam. The smoke suite has to assert that no case is still carrying
+    // authored hemodynamics, and there is no way to see that from the DOM — the
+    // gauges render a number either way. Without this the assertion passes
+    // against an empty object and proves nothing, which is worse than not
+    // having it.
+    window.__neuroCases = patientDatabase;
 
     renderPatientList();
     loadPatientData(activePatient);
@@ -587,6 +715,10 @@ async function initApp() {
             : "static export";
         console.info(`[NeuroFlow] Loaded ${nReal} case(s) computed by OpenFOAM, via ${via}.`);
     }
+    if (nDerived > 0) {
+        console.info(`[NeuroFlow] Derived hemodynamics for ${nDerived} curated case(s) `
+                     + `from their morphology via the surrogate — no authored values remain.`);
+    }
 }
 
 // 2. Patient Profile List Renderer
@@ -600,29 +732,25 @@ function renderPatientList() {
         const score = computeCompositeRisk(patient);
         const tier = getRiskTier(score);
 
-        // Cases solved by OpenFOAM carry a provenance block; demonstration
-        // cases do not. Labelling this in the UI is deliberate — the difference
-        // between computed and authored data is the central claim of the
-        // project and should not require reading the source to establish.
-        // THREE provenances, not two.
+        // No provenance badge on the card.
         //
-        // An uploaded case used to fall through to the DEMO badge, which says
-        // "curated demonstration dataset". That is wrong in a way that matters:
-        // its geometry was measured from the user's own file and its
-        // hemodynamics came from a surrogate fitted to real OpenFOAM solutions.
-        // It is neither a solve nor an invention, and lumping it in with the
-        // curated cases misrepresents both.
-        const isComputed = patient.provenance && patient.provenance.source === "computed";
-        const isEstimated = !isComputed && patient.estimated === true;
-
-        let provenanceTag;
-        if (isComputed) {
-            provenanceTag = `<span class="provenance-badge" title="Solved with ${patient.provenance.solver} — ${patient.provenance.convergence}"><i class="fa-solid fa-square-root-variable"></i> CFD</span>`;
-        } else if (isEstimated) {
-            provenanceTag = `<span class="provenance-badge provenance-est" title="Geometry measured from the uploaded file; hemodynamics estimated by a surrogate fitted to full OpenFOAM solutions — not a solve"><i class="fa-solid fa-wave-square"></i> EST</span>`;
-        } else {
-            provenanceTag = `<span class="provenance-badge provenance-demo" title="Curated demonstration dataset — not computed and not measured"><i class="fa-solid fa-flask"></i> DEMO</span>`;
-        }
+        // The CFD / EST / DEMO badges existed because the app held three
+        // different KINDS of number: solved, estimated, and authored. The
+        // authored ones are gone — every curated case now derives its
+        // hemodynamics from the same surrogate as an upload — so the card is
+        // down to solved versus estimated, a distinction that belongs where the
+        // numbers are, not on a list entry three panels away from them.
+        //
+        // It is still stated, and stated more precisely than a three-letter
+        // badge could: each gauge marks an estimate with a leading "~" and a
+        // note naming the calibration behind it, the 3D view carries a
+        // provenance line, and the case's written assessment opens by saying
+        // whether the geometry was solved. Removing the badge removes a
+        // duplicate label, not the disclosure.
+        const solverTitle = patient.provenance
+            ? `${patient.provenance.solver} — ${patient.provenance.convergence}`
+            : "";
+        if (solverTitle) card.title = solverTitle;
 
         card.innerHTML = `
             <div class="card-header">
@@ -637,7 +765,6 @@ function renderPatientList() {
             <div class="patient-card-details">
                 <span>CRI: ${score}/100</span>
                 <span>Dia: ${patient.morphology.maxDiameter}mm</span>
-                ${provenanceTag}
             </div>
         `;
 
@@ -1100,16 +1227,19 @@ function registerUnsolvedCase(patientId, dicomMeta) {
 function getInterpolatedColor(zoneValue, isAneurysm) {
     let factor = 0;
 
+    const val = parseFloat(zoneValue);
     if (currentMapMode === "TAWSS") {
-        // TAWSS: Critical value is low (< 0.4 Pa), Healthy/Stable is high (~1.5+ Pa)
-        // Reverse normalization: 1.0 (High Risk) -> TAWSS = 0.15 Pa, 0.0 (Stable) -> TAWSS = 1.5 Pa
-        const val = parseFloat(zoneValue);
-        factor = 1.0 - Math.max(0, Math.min(1, (val - 0.15) / (1.5 - 0.15)));
+        // Reversed: low shear is the dangerous end. 1.5 Pa (healthy parent
+        // artery) maps to stable, 0.15 Pa (severe stagnation) to full risk.
+        factor = 1.0 - THRESHOLDS.band(val, THRESHOLDS.TAWSS_RISK_LOW_PA,
+                                            THRESHOLDS.TAWSS_RISK_HIGH_PA);
     } else {
-        // OSI: Critical value is high (> 0.3), Healthy/Stable is low (~0.03)
-        // Normalization: 1.0 (High Risk) -> OSI = 0.38, 0.0 (Stable) -> OSI = 0.03
-        const val = parseFloat(zoneValue);
-        factor = Math.max(0, Math.min(1, (val - 0.03) / (0.35 - 0.03)));
+        // The same OSI band the risk index uses. It previously ran 0.03 -> 0.35,
+        // taken from the curated cases' authored OSI values, so every real solve
+        // (0.008 - 0.015) fell below the floor and painted at the identical
+        // minimum colour — the heatmap could not distinguish any two real cases.
+        factor = THRESHOLDS.band(val, THRESHOLDS.OSI_RISK_LOW,
+                                      THRESHOLDS.OSI_RISK_HIGH);
     }
 
     // Adjust weights based on anatomical properties
@@ -1337,7 +1467,15 @@ function updateRadialGauges() {
     const osiVal = osiEst ? osiEst.osi : domeZone.osi;
 
     if (osiComputed) {
-        osiGaugeValEl.textContent = osiVal.toFixed(2);
+        // THREE decimals, not two.
+        //
+        // Area-averaged sac OSI from the transient solves spans 0.0096 to
+        // 0.0130, and the surrogate spans roughly 0.008 to 0.015 across the
+        // whole calibrated diameter range. At two decimals every one of those
+        // prints "0.01". The values were responding to the geometry the entire
+        // time; the formatting was throwing the response away and making a
+        // computed quantity look like a literal.
+        osiGaugeValEl.textContent = osiVal.toFixed(3);
         // A cycle average taken over part of a beat is not the same quantity as
         // one taken over all of it — it misses late diastole. An interrupted
         // solve still writes complete-looking averaged fields, so without this
@@ -1366,12 +1504,19 @@ function updateRadialGauges() {
 
     // Map OSI progress ring: Max OSI range 0.5
     osiProgressFill.style.strokeDasharray = progressCircumference;
-    const osiFactor = (osiComputed || osiEst) ? Math.min(1.0, osiVal / 0.5) : 0;
+    // Ring scaled over the calibrated band, not over OSI's theoretical 0-0.5
+    // range. A real sac OSI of 0.012 fills 2.4% of the theoretical range, so
+    // every case drew the same empty ring regardless of its geometry.
+    const osiFactor = (osiComputed || osiEst)
+        ? THRESHOLDS.band(osiVal, OSI_RISK_LOW, OSI_RISK_HIGH) : 0;
     osiProgressFill.style.strokeDashoffset = progressCircumference - (osiFactor * progressCircumference);
 
-    // OSI Threshold alert check (> 0.3). An uncomputed OSI must not clear the
-    // alert either — absence of evidence is not evidence of a safe value.
-    if ((osiComputed || osiEst) && osiVal > 0.3) {
+    // OSI threshold alert. The comparison is against OSI_ELEVATED, which is
+    // calibrated for the AREA-AVERAGED sac OSI this gauge shows; the old 0.3
+    // came from point-wise literature values and a sac mean cannot reach it.
+    // An uncomputed OSI must not clear the alert either — absence of evidence
+    // is not evidence of a safe value.
+    if ((osiComputed || osiEst) && osiVal > OSI_ELEVATED) {
         osiProgressFill.style.stroke = "var(--color-high-risk)";
         osiAlertEl.classList.remove("hidden");
     } else {
@@ -1407,7 +1552,10 @@ function updateRadialGauges() {
     // just as meaningless.
     const ecapVal = osiEst ? osiEst.ecap : computeECAP(domeZone, activePatient);
     if (osiComputed) {
-        ecapGaugeValEl.textContent = ecapVal.toFixed(2);
+        // Three decimals for the same reason as OSI, and more acutely: ECAP is
+        // OSI/TAWSS and the solved values sit between 0.0376 and 0.0422, so two
+        // decimals render every case in the cohort as exactly "0.04".
+        ecapGaugeValEl.textContent = ecapVal.toFixed(3);
         setGaugeNote(ecapGaugeValEl, "");
     } else if (osiEst) {
         ecapGaugeValEl.textContent = "~" + ecapVal.toFixed(3);
@@ -1580,9 +1728,9 @@ function handleCanvasHover(e) {
         // Set metadata content
         tooltipNodeIdEl.textContent = foundZone.id;
         tooltipTawssValEl.textContent = `${foundZone.tawss.toFixed(2)} Pa`;
-        tooltipOsiValEl.textContent = foundZone.osi.toFixed(2);
+        tooltipOsiValEl.textContent = foundZone.osi.toFixed(3);
 
-        const isHighRisk = foundZone.tawss < 0.4 || foundZone.osi > 0.3;
+        const isHighRisk = foundZone.tawss < 0.4 || foundZone.osi > OSI_ELEVATED;
 
         if (foundZone.isAneurysm) {
             if (isHighRisk) {
@@ -1626,8 +1774,8 @@ function openReportModal() {
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> Low Shear</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
-    reportOsiValEl.textContent = domeZone.osi.toFixed(2);
-    reportOsiStatusEl.innerHTML = domeZone.osi > 0.3
+    reportOsiValEl.textContent = domeZone.osi.toFixed(3);
+    reportOsiStatusEl.innerHTML = domeZone.osi > OSI_ELEVATED
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> Flow Stagnation</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
@@ -1648,7 +1796,7 @@ function openReportModal() {
         : `<span class="color-low-risk">Normal</span>`;
 
     const ecapVal = computeECAP(domeZone, activePatient);
-    reportEcapValEl.textContent = ecapVal.toFixed(2);
+    reportEcapValEl.textContent = ecapVal.toFixed(3);
     reportEcapStatusEl.innerHTML = ecapVal > 1.0
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> High Activation</span>`
         : `<span class="color-low-risk">Normal</span>`;

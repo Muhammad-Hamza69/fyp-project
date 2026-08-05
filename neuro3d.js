@@ -41,7 +41,12 @@ const ASSET_META = 'models/brain.json';
 const STABLE_COLOR = '#1F5F99';
 const CRITICAL_COLOR = '#B83232';
 const TAWSS_MIN = 0.15, TAWSS_MAX = 1.5;
-const OSI_MIN = 0.03, OSI_MAX = 0.35;
+// From thresholds.js, so the sac's colour, the 2D heatmap and the risk index
+// all read the same scale. These were 0.03 and 0.35 — the curated cases'
+// authored OSI values — which put every real solve below the floor and painted
+// every sac the identical minimum colour.
+const OSI_MIN = window.NeuroThresholds.OSI_RISK_LOW;
+const OSI_MAX = window.NeuroThresholds.OSI_RISK_HIGH;
 
 // Fixed viewing distance in model units, identical for every case so sac sizes
 // are directly comparable between patients. Mirrored in render_brain.py.

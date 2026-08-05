@@ -44,7 +44,14 @@ import numpy as np
 STABLE_RGB = np.array([0x1F, 0x5F, 0x99], dtype=float)
 CRITICAL_RGB = np.array([0xB8, 0x32, 0x32], dtype=float)
 TAWSS_MIN, TAWSS_MAX = 0.15, 1.5
-OSI_MIN, OSI_MAX = 0.03, 0.35
+
+# Mirrors OSI_RISK_LOW/HIGH in thresholds.js, which neuro3d.js also reads. This
+# was 0.03 to 0.35 — the curated cases' AUTHORED OSI values — and every real
+# solve (0.0096 to 0.0130 area-weighted over the sac) fell below the floor, so
+# the fallback render painted every case the identical minimum colour. The
+# interactive view had the same bug, which is why the two agreed and the mirror
+# test below passed while both were wrong.
+OSI_MIN, OSI_MAX = 0.002, 0.030
 # Fixed viewing distance in model units, the same for every case so sac sizes
 # are directly comparable between patients. At a 45 deg field of view this
 # frames roughly 45 mm across — an 11 mm sac with enough surrounding vessel to

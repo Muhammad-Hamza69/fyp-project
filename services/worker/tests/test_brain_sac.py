@@ -148,10 +148,41 @@ def test_low_shear_is_red_and_healthy_shear_is_blue():
 
 
 def test_osi_mode_reads_osi_not_tawss():
-    a = render_brain.sac_params(META, _patient(tawss=0.14, osi=0.02), "OSI")
-    b = render_brain.sac_params(META, _patient(tawss=0.14, osi=0.34), "OSI")
+    # Values from the calibrated band (0.002-0.030), not the old 0.03-0.35 one.
+    # Under the old band both of these would have been below the floor and both
+    # would have returned 0.0 — the test passed by comparing two clamped
+    # results, which is how a dead normalisation survives a mirror test.
+    a = render_brain.sac_params(META, _patient(tawss=0.14, osi=0.002), "OSI")
+    b = render_brain.sac_params(META, _patient(tawss=0.14, osi=0.030), "OSI")
     assert a["risk_factor"] == pytest.approx(0.0)
     assert b["risk_factor"] > 0.95
+
+
+def test_osi_band_covers_the_values_the_solver_produces():
+    """
+    The band must be REACHABLE. This is the check that was missing.
+
+    OSI_MIN/MAX ran 0.03 to 0.35, taken from the three curated cases' authored
+    OSI values. Area-weighted sac OSI from every transient solve in this project
+    is 0.0096 to 0.0130 — an order of magnitude below the floor — so every real
+    case clamped to 0 and rendered identically, in the browser, in the fallback
+    image, and in the Composite Risk Index, which lost a third of its weight.
+
+    A threshold no input can cross is not a strict test. It is a dead one, and
+    it fails silently and forever.
+    """
+    solved = [0.0096, 0.0124, 0.0130]        # synthetic01, PT-2026-0101, PT-2026-0103
+    for osi in solved:
+        f = render_brain.sac_params(META, _patient(tawss=0.2, osi=osi), "OSI")["risk_factor"]
+        assert 0.0 < f < 1.0, (
+            f"sac OSI {osi} normalises to {f} — clamped, so the solver's own "
+            f"output lands outside the band it is scored against"
+        )
+
+    # And distinguishable from one another, not merely non-zero.
+    factors = [render_brain.sac_params(META, _patient(tawss=0.2, osi=o), "OSI")["risk_factor"]
+               for o in solved]
+    assert max(factors) - min(factors) > 0.05, factors
 
 
 # --- the Python/JS mirror --------------------------------------------------
@@ -171,8 +202,22 @@ def test_shared_constants_match_the_browser():
 
     assert num(r"TAWSS_MIN\s*=\s*([\d.]+)") == render_brain.TAWSS_MIN
     assert num(r"TAWSS_MAX\s*=\s*([\d.]+)") == render_brain.TAWSS_MAX
-    assert num(r"OSI_MIN\s*=\s*([\d.]+)") == render_brain.OSI_MIN
-    assert num(r"OSI_MAX\s*=\s*([\d.]+)") == render_brain.OSI_MAX
+    # The OSI band moved to thresholds.js, which neuro3d.js now reads instead of
+    # declaring its own copy — that duplication is how the dashboard came to
+    # alert above OSI 0.3 while the worker alerted above 0.2. Assert the
+    # indirection is real, then compare against the file that owns the numbers.
+    assert "NeuroThresholds.OSI_RISK_LOW" in js, (
+        "neuro3d.js redeclared the OSI band instead of reading thresholds.js"
+    )
+    thresholds = (REPO / "thresholds.js").read_text(encoding="utf-8")
+
+    def shared(pattern: str) -> float:
+        m = re.search(pattern, thresholds)
+        assert m, f"not found in thresholds.js: {pattern}"
+        return float(m.group(1))
+
+    assert shared(r"OSI_RISK_LOW:\s*([\d.]+)") == render_brain.OSI_MIN
+    assert shared(r"OSI_RISK_HIGH:\s*([\d.]+)") == render_brain.OSI_MAX
     assert num(r"VIEW_DISTANCE\s*=\s*([\d.]+)") == render_brain.VIEW_DISTANCE
 
     for name, rgb in (("STABLE_COLOR", render_brain.STABLE_RGB),

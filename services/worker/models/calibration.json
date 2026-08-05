@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T15:57:40",
+  "generatedAt": "2026-08-05T20:13:15",
   "solver": "OpenFOAM ESI v2412 simpleFoam (steady)",
   "note": "Each point is a real CFD solution. The surrogate interpolates between them; it does not replace them.",
   "points": [
@@ -142,6 +142,66 @@
       "lsar_absolute": 0.9411,
       "wss_max_pa": 47.135,
       "mesh_cells": "cells:            1218949"
+    },
+    {
+      "case": "sweep_r0600_n0300",
+      "sac_radius_m": 0.006,
+      "neck_offset_m": 0.003,
+      "max_diameter_mm": 12.02,
+      "neck_diameter_mm": 11.46,
+      "aspect_ratio": 0.66,
+      "dome_to_neck": 1.05,
+      "volume_mm3": 746.6,
+      "non_sphericity_index": 0.3433,
+      "parent_tawss_pa": 2.7108,
+      "sac_tawss_pa": 0.2876,
+      "neck_tawss_pa": 0.4949,
+      "nwss": 0.1061,
+      "rrt": 13.142,
+      "lsar_relative": 0.7615,
+      "lsar_absolute": 0.83,
+      "wss_max_pa": 34.484,
+      "mesh_cells": "cells:            1563621"
+    },
+    {
+      "case": "sweep_r0400_n0040",
+      "sac_radius_m": 0.004,
+      "neck_offset_m": 0.0004,
+      "max_diameter_mm": 8.2,
+      "neck_diameter_mm": 7.69,
+      "aspect_ratio": 0.68,
+      "dome_to_neck": 1.07,
+      "volume_mm3": 205.2,
+      "non_sphericity_index": 0.076,
+      "parent_tawss_pa": 2.9257,
+      "sac_tawss_pa": 0.2918,
+      "neck_tawss_pa": 0.6621,
+      "nwss": 0.0998,
+      "rrt": 9.352,
+      "lsar_relative": 0.7919,
+      "lsar_absolute": 0.8376,
+      "wss_max_pa": 51.44,
+      "mesh_cells": "cells:            455320"
+    },
+    {
+      "case": "sweep_r0400_n0300",
+      "sac_radius_m": 0.004,
+      "neck_offset_m": 0.003,
+      "max_diameter_mm": 8.0,
+      "neck_diameter_mm": 4.49,
+      "aspect_ratio": 1.65,
+      "dome_to_neck": 1.78,
+      "volume_mm3": 269.5,
+      "non_sphericity_index": 0.2763,
+      "parent_tawss_pa": 2.9768,
+      "sac_tawss_pa": 0.1173,
+      "neck_tawss_pa": 0.3152,
+      "nwss": 0.0394,
+      "rrt": 29.54,
+      "lsar_relative": 0.9325,
+      "lsar_absolute": 0.9492,
+      "wss_max_pa": 32.795,
+      "mesh_cells": "cells:            584934"
     }
   ]
 }

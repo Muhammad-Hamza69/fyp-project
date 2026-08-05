@@ -807,6 +807,10 @@
         </div>
     </div>
 
+    <!-- Clinical and calibration thresholds. FIRST: every script below reads
+         them, and neuro3d.js is a module (deferred), so a classic script here
+         is guaranteed to have run before any of them evaluate. -->
+    <script src="thresholds.js"></script>
     <!-- 3D nerve/vascular model viewer (Three.js) -->
     <script type="module" src="neuro3d.js"></script>
     <!-- Application script -->

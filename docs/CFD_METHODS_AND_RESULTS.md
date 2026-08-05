@@ -231,7 +231,11 @@ The available hardware (6 physical cores, 16 GB RAM, 4 GB GPU) permits roughly o
 | Results shown after an upload | **Real, or explicitly absent.** A scan whose patient has a completed CFD run displays that run's computed hemodynamics. One that does not shows `not computed` for TAWSS, OSI, RRT and ECAP — it no longer invents them by string-matching the filename, and the low-shear alert cannot fire on an unsolved case |
 | The 6-step progress animation during upload | **Still a scripted visualisation.** Segmentation, meshing and solving do not run in the browser; the stage list and its timings are illustrative. What it reports about the *file* is now read from the file |
 
-Cases displaying a **CFD** badge in the dashboard carry a `provenance` block recording solver version, mesh size, mesh quality and convergence. Cases displaying a **DEMO** badge are the original curated dataset and are not computed.
+Every case carries a `provenance` block. `source: "computed"` records solver version, mesh size, mesh quality and convergence for a case solved by OpenFOAM; `source: "surrogate"` records how many solves the response surface was fitted to, for a case whose hemodynamics were estimated from its geometry.
+
+There is no third kind any more. The three original demonstration cases held **authored** TAWSS and OSI values, and they did more damage than being merely decorative: because they were the only cases in the app when the Composite Risk Index was written, the index's OSI normalisation band was calibrated against them. Their dome OSI of 0.08–0.38 set a floor of 0.03, which no physical solve reaches — every transient run here lands between 0.0096 and 0.0130 — so the clamp pinned the OSI term to exactly zero for every real case, permanently. A quantity carrying 30 % of the composite weight contributed nothing, and the index looked insensitive to the uploaded file because for a third of its weight it was.
+
+Those three cases now derive their hemodynamics from the same surrogate that serves an upload, using the morphology they always carried. The dashboard's CFD / EST / DEMO badges were removed with them: with no authored data left, the distinction they marked is between *solved* and *estimated*, which each gauge already states in place — a leading `~`, and a note naming the calibration behind the number.
 
 ---
 

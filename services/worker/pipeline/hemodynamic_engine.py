@@ -72,7 +72,21 @@ INLET_PATCH = "inlet"
 OUTLET_PATCH = "outlet"
 
 TAWSS_LOW_PA = 0.4
-OSI_HIGH = 0.2
+# "Elevated" for an AREA-AVERAGED sac OSI, matching thresholds.js.
+#
+# This was 0.2, a literature figure for POINT-WISE or peak OSI, applied to an
+# area-weighted mean over the whole sac. Those are different statistics: a sac
+# can carry local OSI above 0.4 in its recirculation core while averaging 0.012
+# overall. Every transient solve here landed between 0.0096 and 0.0130, so
+# against 0.2 the flag could never be raised — it was not a strict test, it was
+# an unreachable one. The dashboard had the same problem one step worse, at 0.3,
+# so the same solve was "elevated" on neither side while the two disagreed about
+# which unreachable number to use.
+#
+# 0.030 is the top of the band calibrated on the solved range. It means
+# "elevated relative to what this solver has produced", which is what there is
+# evidence for, and not a clinical finding.
+OSI_HIGH = 0.030
 RRT_HIGH = 3.0
 ECAP_HIGH = 1.0
 
