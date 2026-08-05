@@ -23,6 +23,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { installBrowserGlobals, environmentBanner, warnOnDependencyDrift }
+    from "./browser-env.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -92,9 +94,23 @@ const record = (msg) => {
     if (!EXPECTED.some((re) => re.test(s))) errors.push(s);
 };
 window.addEventListener("error", (e) => record(e.error || e.message));
+// initApp is async, so anything it throws surfaces as an unhandled REJECTION
+// rather than a window error event — invisible to the listener above, and the
+// reason a broken initialisation could leave every gauge blank while
+// "page initialises without throwing" still passed.
+process.on("unhandledRejection", (e) => record(`unhandled rejection: ${e && e.stack || e}`));
 window.console.error = (...a) => record(a.map(String).join(" "));
 
 // --- execute the page -------------------------------------------------------
+// Browser globals first. Which of them jsdom supplies depends on its VERSION,
+// and this repo has already shipped five commits whose CI was red while the
+// same suites passed locally, because CI installs the lockfile's jsdom 25.0.1
+// and the local tree had drifted to 29.1.1. See tests/browser-env.mjs.
+installBrowserGlobals(window);
+await warnOnDependencyDrift();
+console.log(`  environment: ${await environmentBanner()}
+`);
+
 // thresholds.js first, exactly as index.html orders it: app.js reads
 // window.NeuroThresholds at module scope, so loading it second throws.
 window.eval(readFileSync(resolve(ROOT, "thresholds.js"), "utf8"));
@@ -115,7 +131,21 @@ check("app.js evaluates without throwing", true);
 // otherwise propagate out and kill the process with a raw stack trace before
 // any result was printed — a correct non-zero exit, but an unreadable one.
 try {
-    window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
+    // `bubbles: true` is load-bearing, not decoration.
+    //
+    // app.js registers its listener on WINDOW, not document. A real
+    // DOMContentLoaded bubbles from document up to window; a plain
+    // `new Event("DOMContentLoaded")` does not bubble, so the listener was
+    // never reached and initApp never ran. The page then sat in its
+    // uninitialised state and fourteen checks below failed against gauges that
+    // had simply never been filled in — every one of them reporting a product
+    // bug that did not exist.
+    //
+    // jsdom 29 tolerated it and jsdom 25 did not, which is how it survived: the
+    // local tree had drifted off the lockfile, so the version that exposed this
+    // only ever ran in CI.
+    window.document.dispatchEvent(
+        new window.Event("DOMContentLoaded", { bubbles: true, cancelable: false }));
     check("page initialises without throwing", true);
 } catch (err) {
     check("page initialises without throwing", false, String(err && err.stack || err));

@@ -31,6 +31,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { installBrowserGlobals, environmentBanner, warnOnDependencyDrift }
+    from "./browser-env.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const UPLOADS = resolve(ROOT, "test-uploads");
@@ -46,12 +48,15 @@ const dom = new JSDOM("<!doctype html><html><body></body></html>", {
     runScripts: "outside-only",
 });
 const window = dom.window;
-// The .gz readers need these. Node has them globally; jsdom's window does not,
-// and without them the gzip formats fail for a reason that has nothing to do
-// with the code under test.
-window.DecompressionStream = globalThis.DecompressionStream;
-window.Blob = globalThis.Blob;
-window.Response = globalThis.Response;
+
+// Which globals jsdom provides varies BY VERSION, and this suite went red in CI
+// for five commits while passing locally because the two were running jsdom
+// 25.0.1 and 29.1.1 respectively — the older one has no window.TextDecoder, so
+// the Fluent reader threw a ReferenceError that had nothing to do with it.
+// Fill them from Node explicitly instead of hoping.
+installBrowserGlobals(window);
+await warnOnDependencyDrift();
+console.log(`  environment: ${await environmentBanner()}`);
 
 const surrogateModel = JSON.parse(
     readFileSync(resolve(ROOT, "models/surrogate.json"), "utf8"));
