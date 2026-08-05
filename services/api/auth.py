@@ -144,6 +144,49 @@ def require_auth(p: Principal = Depends(current_principal)) -> Principal:
     return p
 
 
+# Explicit escape hatch for local work against a throwaway database. It must be
+# set deliberately; the default is to refuse.
+ALLOW_DEV_WRITES = os.environ.get("NEUROFLOW_ALLOW_DEV_WRITES", "") == "1"
+
+
+def require_write(p: Principal = Depends(current_principal)) -> Principal:
+    """
+    Gate for anything that MUTATES state.
+
+    Reads are deliberately open — this dashboard is a public demonstration over
+    synthetic data and is meant to be looked at. Writes are not, and until now
+    they were: `AUTH_ENABLED` is false whenever Clerk is unconfigured, which is
+    the case on the deployed instance, so every caller resolved to the dev
+    principal. The mutating routes did not even depend on `current_principal`,
+    so a single unauthenticated `curl -X DELETE` could remove a patient from
+    the live database.
+
+    This fails CLOSED in both directions:
+      - Clerk configured   -> a valid bearer token is required.
+      - Clerk unconfigured -> mutations are refused outright, rather than
+                              silently granted to everyone. Being unable to
+                              write is a visible, diagnosable state; being
+                              writable by anyone is not.
+
+    Set NEUROFLOW_ALLOW_DEV_WRITES=1 to work locally without Clerk.
+    """
+    if AUTH_ENABLED:
+        if p.is_dev:
+            raise HTTPException(401, "authentication required")
+        return p
+
+    if ALLOW_DEV_WRITES:
+        return p
+
+    raise HTTPException(
+        503,
+        "This deployment has no authentication provider configured, so "
+        "write operations are disabled. Configure CLERK_PUBLISHABLE_KEY (or "
+        "CLERK_JWKS_URL) to enable them, or set NEUROFLOW_ALLOW_DEV_WRITES=1 "
+        "for local development.",
+    )
+
+
 def tenant_filter(p: Principal) -> str | None:
     """
     Organisation to scope queries by, or None for unscoped access.

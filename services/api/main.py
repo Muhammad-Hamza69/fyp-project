@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from auth import Principal, auth_status, current_principal, tenant_filter
+from auth import Principal, auth_status, current_principal, require_write, tenant_filter
 from db import get_session, init_db
 from models import (
     AIResult, Artifact, CFDResult, JobStage, JobState, Patient, Report,
@@ -187,7 +187,7 @@ def list_patients(
 def create_patient(
     body: PatientIn,
     s: Session = Depends(db),
-    principal: Principal = Depends(current_principal),
+    principal: Principal = Depends(require_write),
 ) -> dict:
     if s.get(Patient, body.patient_id):
         raise HTTPException(409, f"patient {body.patient_id} already exists")
@@ -215,7 +215,11 @@ def get_patient(patient_id: str, s: Session = Depends(db)) -> dict:
 
 
 @app.delete("/api/v1/patients/{patient_id}", tags=["patients"], status_code=204)
-def delete_patient(patient_id: str, s: Session = Depends(db)) -> None:
+def delete_patient(
+    patient_id: str,
+    s: Session = Depends(db),
+    principal: Principal = Depends(require_write),
+) -> None:
     p = s.get(Patient, patient_id)
     if not p:
         raise HTTPException(404, "patient not found")
@@ -227,7 +231,12 @@ def delete_patient(patient_id: str, s: Session = Depends(db)) -> None:
 # --------------------------------------------------------------------------- #
 
 @app.post("/api/v1/patients/{patient_id}/studies", tags=["studies"], status_code=201)
-def create_study(patient_id: str, body: StudyIn, s: Session = Depends(db)) -> dict:
+def create_study(
+    patient_id: str,
+    body: StudyIn,
+    s: Session = Depends(db),
+    principal: Principal = Depends(require_write),
+) -> dict:
     if not s.get(Patient, patient_id):
         raise HTTPException(404, "patient not found")
     st = Study(patient_id=patient_id, **body.model_dump())
@@ -253,7 +262,12 @@ def get_study(study_id: str, s: Session = Depends(db)) -> dict:
 # --------------------------------------------------------------------------- #
 
 @app.post("/api/v1/studies/{study_id}/runs", tags=["runs"], status_code=201)
-def create_run(study_id: str, body: RunIn, s: Session = Depends(db)) -> dict:
+def create_run(
+    study_id: str,
+    body: RunIn,
+    s: Session = Depends(db),
+    principal: Principal = Depends(require_write),
+) -> dict:
     st = s.get(Study, study_id)
     if not st:
         raise HTTPException(404, "study not found")
@@ -314,7 +328,11 @@ def get_stages(run_id: str, s: Session = Depends(db)) -> list[dict]:
 
 
 @app.post("/api/v1/runs/{run_id}/cancel", tags=["runs"])
-def cancel_run(run_id: str, s: Session = Depends(db)) -> dict:
+def cancel_run(
+    run_id: str,
+    s: Session = Depends(db),
+    principal: Principal = Depends(require_write),
+) -> dict:
     r = s.get(Run, run_id)
     if not r:
         raise HTTPException(404, "run not found")

@@ -26,6 +26,13 @@ sys.path.insert(0, str(_API))
 # Point the app at SQLite BEFORE importing db/main, which read it at import time.
 os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
 
+# Mutating routes refuse to run when no authentication provider is configured
+# (see auth.require_write). The suite has no Clerk instance and legitimately
+# needs to write, so it opts in EXPLICITLY. Setting this here rather than
+# defaulting it in the app is the point: the deployed instance has no such
+# opt-in, so its writes stay closed.
+os.environ["NEUROFLOW_ALLOW_DEV_WRITES"] = "1"
+
 
 @pytest.fixture(scope="module")
 def client():

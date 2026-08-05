@@ -224,7 +224,9 @@ The available hardware (6 physical cores, 16 GB RAM, 4 GB GPU) permits roughly o
 | Aneurysm **anatomy** | **Idealised** — parametric, not patient-derived |
 | Automatic vessel segmentation | **Implemented, not exercised on these cases.** `imaging.py` provides DICOM validation, SNR/CNR/motion QA, Frangi/Hessian multi-scale vesselness, region growing and Dice/Hausdorff validation. The cohort geometries are parametric, so nothing was segmented to produce them |
 | AI / ML rupture prediction | **Implemented — illustrative only.** LightGBM with exact-tree SHAP, three separable stages (feature extraction → inference → composite). Trained on a **synthetic** cohort from published risk relationships, never on patient data; cross-validated AUC 0.62. Shown on the dashboard and in the report, always with that caveat |
-| Cloud backend, auth, job queue | **Not implemented** (storage provisioned only) |
+| Cloud backend | **Real and deployed.** FastAPI on Vercel serverless against Neon Postgres — 18 versioned `/api/v1` endpoints (patients, studies, runs, stages, results, reports, dashboard feed), immutable run versioning, `X-API-Version` on every response |
+| Auth | **Implemented, not configured on the deployed instance.** Clerk RS256/JWKS verification with organisation-based tenant isolation applied in-query. No Clerk keys are set on the deployment, so it runs unauthenticated — and therefore **all mutating routes refuse with 503**. Reads are open by design: the data is synthetic and the page is meant to be looked at |
+| Job queue (Celery/Redis) | **Not implemented.** Runs are executed by the worker directly; the job/stage state machine and its 22 states exist and are served, but nothing brokers them |
 | The 6-step upload animation in the UI | **Still a scripted visualisation** |
 
 Cases displaying a **CFD** badge in the dashboard carry a `provenance` block recording solver version, mesh size, mesh quality and convergence. Cases displaying a **DEMO** badge are the original curated dataset and are not computed.
