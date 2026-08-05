@@ -967,8 +967,12 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
         // EthnicGroup, AdditionalPatientHistory and AdmittingDiagnoses. Fields
         // the file does not carry stay null, so PHASES reports them missing
         // rather than scoring an unknown as a negative.
-        const clinical = (window.NeuroDicom && window.NeuroDicom.clinicalHistory)
-            ? window.NeuroDicom.clinicalHistory(dicomMeta || {}) : {};
+        // Only DICOM carries clinical history; an STL or a Fluent mesh has no
+        // place to put it. Those cases leave PHASES unscored and say so, rather
+        // than defaulting the fields.
+        const clinical = (dicomMeta && dicomMeta.__clinical)
+            || ((window.NeuroDicom && window.NeuroDicom.clinicalHistory)
+                ? window.NeuroDicom.clinicalHistory(dicomMeta || {}) : {});
 
         const ar = +(dome / Math.max(neck, 0.1)).toFixed(2);
             patientDatabase[patientId] = {
@@ -1760,25 +1764,44 @@ async function runCfdSimulation(fileObject) {
     // scan produced mojibake and the handler then fell back to hardcoded
     // defaults (512x512, 142 slices, 0.5 mm), presenting invented numbers as
     // though they had been read from the file.
-    let dicom = null;
+    // Read whatever was dropped. readers.js dispatches on content and
+    // extension across DICOM, NIfTI, STL and Fluent case files, and returns the
+    // same shape for all four: a sac measurement, header metadata, and whatever
+    // clinical history the format carries (only DICOM carries any).
+    let dicom = null;          // parsed DICOM tags, when the file is DICOM
     let dicomBuffer = null;
+    let readResult = null;
     if (fileObject && typeof fileObject !== "string") {
         try {
             const buf = await fileObject.arrayBuffer();
             dicomBuffer = buf;
-            dicom = window.NeuroDicom ? window.NeuroDicom.parse(buf) : null;
+            if (window.NeuroReaders) {
+                readResult = await window.NeuroReaders.read(fileObject.name, buf);
+            } else if (window.NeuroDicom) {
+                const parsed = window.NeuroDicom.parse(buf);
+                readResult = parsed.ok
+                    ? { ok: true, format: "dicom", label: "DICOM",
+                        measurement: window.NeuroDicom.measureSac(buf, parsed.tags),
+                        meta: parsed.tags,
+                        clinical: window.NeuroDicom.clinicalHistory(parsed.tags) }
+                    : { ok: false, reason: parsed.reason };
+            }
         } catch (e) {
             writeTerminalLog(`[ERROR] Could not read the file: ${e.message}`, "error");
         }
     }
 
-    if (dicom && !dicom.ok) {
+    if (readResult && !readResult.ok) {
         // Stop rather than proceed on defaults. Continuing would present
         // fabricated dimensions as though they came from the upload.
-        writeTerminalLog(`[REJECTED] ${dicom.reason}`, "error");
+        writeTerminalLog(`[REJECTED] ${readResult.reason}`, "error");
         writeTerminalLog("[INFO] Pipeline aborted — nothing was analysed.", "info");
         activeStepBadge.textContent = "Rejected";
         return;
+    }
+    if (readResult && readResult.ok) {
+        writeTerminalLog(`[FORMAT] Recognised as ${readResult.label}.`, "success");
+        dicom = { ok: true, tags: readResult.meta || {} };
     }
 
     // Clinical parameters, taken from the file itself.
@@ -2227,8 +2250,8 @@ async function runCfdSimulation(fileObject) {
         // clinician correcting an automated measurement is normal practice and
         // a threshold-based method is not a clinical segmentation.
         let measured = null;
-        if (dicomBuffer && window.NeuroDicom && window.NeuroDicom.measureSac) {
-            const m = window.NeuroDicom.measureSac(dicomBuffer, dicom.tags);
+        if (readResult && readResult.measurement) {
+            const m = readResult.measurement;
             if (m.ok && m.bulgeDetected) {
                 measured = m;
                 writeTerminalLog(
@@ -2248,6 +2271,8 @@ async function runCfdSimulation(fileObject) {
         // PatientAge came to be the only one that survived.
         await promptMorphologyAndEstimate(patientId, {
             ...t,
+            __clinical: (readResult && readResult.clinical) || {},
+            __format: readResult ? readResult.label : "DICOM",
             modality, studyDate, rows, columns, sliceThickness,
             manufacturer, bodyPart, seriesDescription: seriesDesc, fileName,
         }, measured);

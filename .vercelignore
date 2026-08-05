@@ -45,3 +45,8 @@ NervesOnly_v1.glb
 # patient cases, so the dashboard still treats them as unknown patients and
 # exercises the full measure-and-estimate path.
 !test-uploads/*.dcm
+!test-uploads/*.nii
+!test-uploads/*.nii.gz
+!test-uploads/*.stl
+!test-uploads/*.cas
+!test-uploads/*.cas.gz

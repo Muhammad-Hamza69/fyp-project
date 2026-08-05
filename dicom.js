@@ -319,6 +319,21 @@
         }
         if (!sy || !sx) return { ok: false, reason: "no PixelSpacing (0028,0030) in the header" };
 
+        return measureSlice(data, rows, cols, sy, sx);
+    }
+
+    /**
+     * Measure a sac from one 2-D slice of intensity data.
+     *
+     * Split out from measureSac so NIfTI can use it too. The problem is
+     * identical once the pixels and their spacing are in hand — only the
+     * container differs — and duplicating this logic is how two readers come to
+     * disagree about the same aneurysm.
+     */
+    function measureSlice(data, rows, cols, sy, sx) {
+        if (!data || !rows || !cols) return { ok: false, reason: "no image data" };
+        if (!sy || !sx) return { ok: false, reason: "no voxel spacing" };
+
         // --- Otsu threshold ------------------------------------------------
         let lo = Infinity, hi = -Infinity;
         for (let i = 0; i < data.length; i++) {
@@ -590,5 +605,5 @@
         };
     }
 
-    global.NeuroDicom = { parse, pixels, measureSac, clinicalHistory, TAGS };
+    global.NeuroDicom = { parse, pixels, measureSac, measureSlice, clinicalHistory, TAGS };
 })(typeof window !== "undefined" ? window : globalThis);

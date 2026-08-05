@@ -92,7 +92,11 @@
                     <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
                     <h3>Upload DICOM / MRA</h3>
                     <p>Drag & drop or click to simulate clinical pipeline</p>
-                    <input type="file" id="file-uploader" style="display: none;" multiple>
+                    <!-- Accepts the four formats readers.js can measure a sac from. `accept` is a
+                         filter, not a guarantee: the reader still sniffs the content, because a
+                         file named .dcm is not necessarily DICOM. -->
+                    <input type="file" id="file-uploader" style="display: none;" multiple
+                           accept=".dcm,.dicom,.nii,.nii.gz,.stl,.cas,.cas.gz,.msh">
                 </div>
             </aside>
 
@@ -809,6 +813,9 @@
     <!-- Real binary DICOM parsing for the upload flow. Must load BEFORE app.js,
          which calls window.NeuroDicom.parse() on the dropped file. -->
     <script src="dicom.js"></script>
+    <!-- Multi-format geometry readers (NIfTI, STL, Fluent). Loads AFTER
+         dicom.js, whose measureSlice and clinicalHistory it reuses. -->
+    <script src="readers.js"></script>
     <!-- Evaluates the response surface fitted to the OpenFOAM sweep. Must load
          before app.js, which calls window.NeuroSurrogate on upload. -->
     <script src="surrogate.js"></script>
