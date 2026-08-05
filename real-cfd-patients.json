@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T08:15:24",
+  "generatedAt": "2026-08-05T11:27:50",
   "pipeline": "NeuroFlow CFD worker \u2014 geometry \u2192 snappyHexMesh \u2192 OpenFOAM \u2192 hemodynamic engine",
   "patients": [
     {
@@ -27,8 +27,8 @@
           "x": 160,
           "y": 278,
           "radius": 55,
-          "tawss": 2.9621,
-          "osi": 0.0,
+          "tawss": 3.2909,
+          "osi": 0.0001,
           "isAneurysm": false
         },
         {
@@ -37,8 +37,8 @@
           "x": 470,
           "y": 278,
           "radius": 55,
-          "tawss": 2.7251,
-          "osi": 0.0,
+          "tawss": 3.0276,
+          "osi": 0.0001,
           "isAneurysm": false
         },
         {
@@ -47,8 +47,8 @@
           "x": 320,
           "y": 220,
           "radius": 35,
-          "tawss": 0.4939,
-          "osi": 0.0,
+          "tawss": 0.591,
+          "osi": 0.0086,
           "isAneurysm": true
         },
         {
@@ -57,50 +57,50 @@
           "x": 320,
           "y": 120,
           "radius": 50,
-          "tawss": 0.2353,
-          "osi": 0.0,
+          "tawss": 0.2924,
+          "osi": 0.0081,
           "isAneurysm": true
         }
       ],
       "hemodynamics": {
-        "lsarRelative": 0.8434,
-        "lsarAbsolute": 0.8822,
-        "nwss": 0.0795,
-        "rrt": 11.069,
-        "ecap": 0.0,
-        "wssMaxPa": 28.581,
-        "wssMinPa": 0.0036,
-        "rrtAreaWeighted": 11.069,
-        "rrtFromMeans": 4.249,
-        "ecapAreaWeighted": 0.0,
-        "ecapFromMeans": 0.0,
-        "transWssPa": 0.0,
-        "wssgPaPerMm": 0.2861,
-        "afi": 1.0,
+        "lsarRelative": 0.828,
+        "lsarAbsolute": 0.8595,
+        "nwss": 0.0888,
+        "rrt": 8.645,
+        "ecap": 0.1872,
+        "wssMaxPa": 32.458,
+        "wssMinPa": 0.0201,
+        "rrtAreaWeighted": 8.645,
+        "rrtFromMeans": 3.476,
+        "ecapAreaWeighted": 0.1872,
+        "ecapFromMeans": 0.0276,
+        "transWssPa": 0.0015,
+        "wssgPaPerMm": 0.3223,
+        "afi": 0.9838,
         "gon": 0.0,
-        "lsa": 0.8434,
-        "hsa": 0.0011,
-        "sci": 32.047,
-        "ici": 1.546,
-        "ker": 0.0482,
-        "vdr": 0.0843,
-        "plc": 9.068,
-        "vortexVolumeFraction": 0.4625,
-        "reynolds": 403.0,
+        "lsa": 0.828,
+        "hsa": 0.0008,
+        "sci": 28.136,
+        "ici": 1.386,
+        "ker": 0.0493,
+        "vdr": 0.0837,
+        "plc": 10.373,
+        "vortexVolumeFraction": 0.4608,
+        "reynolds": 368.8,
         "womersley": 3.08,
-        "meanVelocityMs": 0.3142,
-        "wssStdPa": 0.4769,
-        "transient": false
+        "meanVelocityMs": 0.2876,
+        "wssStdPa": 0.5506,
+        "transient": true
       },
       "riskBreakdown": {
-        "tawssScore": 93.67823802949644,
+        "tawssScore": 89.45285513902249,
         "osiScore": 0.0,
         "diameterScore": 74.98229215852916,
-        "aspectScore": 10.141149923231994,
-        "composite": 49
+        "aspectScore": 10.141146175050372,
+        "composite": 48
       },
       "riskTier": "Moderate",
-      "clinicalAssessment": "Computational fluid dynamics analysis of case PT-2026-0101. Time-averaged wall shear stress at the aneurysm dome measured 0.235 Pa against 2.962 Pa in the parent artery (normalised WSS 0.079), with an oscillatory shear index of 0.000. 84.3% of the sac surface lies below 10% of the parent-artery shear (LSAR). Relative residence time at the dome is 11.07 Pa^-1. Sac morphology measured from the reconstructed surface: maximum diameter 8.00 mm, neck 6.90 mm, aspect ratio 0.88, volume 240.7 mm^3. Composite Risk Index 49/100 (Moderate).",
+      "clinicalAssessment": "Computational fluid dynamics analysis of case PT-2026-0101. Time-averaged wall shear stress at the aneurysm dome measured 0.292 Pa against 3.291 Pa in the parent artery (normalised WSS 0.089), with an oscillatory shear index of 0.008. 82.8% of the sac surface lies below 10% of the parent-artery shear (LSAR). Relative residence time at the dome is 8.64 Pa^-1. Sac morphology measured from the reconstructed surface: maximum diameter 8.00 mm, neck 6.90 mm, aspect ratio 0.88, volume 240.7 mm^3. Composite Risk Index 48/100 (Moderate).",
       "provenance": {
         "source": "computed",
         "solver": "OpenFOAM ESI v2412",
@@ -109,74 +109,76 @@
         "meshCells": "cells:            511015",
         "meshNonOrthogonality": "Mesh non-orthogonality Max: 55.300715 average: 6.7248788",
         "meshSkewness": "Max skewness = 3.1754568 OK.",
-        "convergence": "",
+        "convergence": "Time = 1.2e-05",
         "bloodDensityKgM3": 1060.0,
         "kinematicViscosityM2S": 3.302e-06,
         "note": "WSS converted from OpenFOAM kinematic units (m^2/s^2) to Pascals by multiplying by rho = 1060.0. Validated against the analytic Poiseuille solution tau = 4*mu*Q/(pi*r^3).",
-        "convergenceState": "CONVERGED",
+        "convergenceState": "OSCILLATING",
         "convergenceTrustworthy": true,
         "massConserved": true,
-        "continuityError": -2.2257555e-07,
-        "solverIterations": 1500,
+        "continuityError": -6.9127563e-13,
+        "solverIterations": 2806,
         "residualsFinal": {
-          "Ux": 1.4962001e-08,
-          "Uy": 6.6259381e-07,
-          "Uz": 5.284674e-06,
-          "p": 6.399847e-08
+          "Ux": 2.1423763e-07,
+          "Uy": 2.9930251e-06,
+          "Uz": 5.4716846e-06,
+          "p": 6.7815305e-07
         },
-        "convergenceNotes": []
+        "convergenceNotes": [
+          "transient solver: per-timestep residuals are expected to oscillate; convergence is judged per timestep, not across the run"
+        ]
       },
       "ml": {
         "model_version": "lgbm-synth-v1",
-        "probability": 0.12932054536495266,
+        "probability": 0.17508974177912215,
         "risk_category": "Low",
-        "confidence": 0.7413589092700947,
+        "confidence": 0.6498205164417556,
         "expected_value": -1.9372893534550164,
         "shap": [
           {
             "feature": "tawss_sac_pa",
-            "value": 0.2353,
-            "contribution": 0.3260666467607326
+            "value": 0.2924,
+            "contribution": 0.3288409577390915
           },
           {
             "feature": "non_sphericity_index",
             "value": 0.1467,
-            "contribution": -0.30050031467984956
+            "contribution": -0.2924222114197178
           },
           {
             "feature": "lsar_relative",
-            "value": 0.8434,
-            "contribution": 0.2680994537227027
+            "value": 0.828,
+            "contribution": 0.27613519430194383
           },
           {
             "feature": "aspect_ratio",
             "value": 0.88,
-            "contribution": -0.24373516087255884
-          },
-          {
-            "feature": "osi_sac",
-            "value": 0.0,
-            "contribution": -0.22182377090687233
+            "contribution": -0.25486823614884657
           },
           {
             "feature": "age",
             "value": 64.0,
-            "contribution": -0.20212433434279203
+            "contribution": -0.1792926198158979
           },
           {
             "feature": "site_score",
             "value": 2.0,
-            "contribution": 0.17788680628596415
+            "contribution": 0.17555360275394288
           },
           {
-            "feature": "ecap_sac",
-            "value": 0.0,
-            "contribution": -0.13150550588011997
+            "feature": "max_diameter_mm",
+            "value": 8.0,
+            "contribution": 0.14445688172445562
+          },
+          {
+            "feature": "rrt_sac",
+            "value": 8.645,
+            "contribution": 0.108373800018626
           }
         ],
         "cv_auc": 0.620251586145876,
         "clinical_validity": "ILLUSTRATIVE ONLY. Not trained or validated on patient data. Demonstrates the feature/inference/explainability pipeline. Must not be used for clinical decision-making.",
-        "inputs_complete": false
+        "inputs_complete": true
       }
     },
     {

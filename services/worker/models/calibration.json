@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T11:54:07",
+  "generatedAt": "2026-08-05T12:25:21",
   "solver": "OpenFOAM ESI v2412 simpleFoam (steady)",
   "note": "Each point is a real CFD solution. The surrogate interpolates between them; it does not replace them.",
   "points": [
@@ -82,6 +82,26 @@
       "lsar_absolute": 0.8507,
       "wss_max_pa": 27.261,
       "mesh_cells": "cells:            334515"
+    },
+    {
+      "case": "sweep_r0400_n0140",
+      "sac_radius_m": 0.004,
+      "neck_offset_m": 0.0014,
+      "max_diameter_mm": 8.0,
+      "neck_diameter_mm": 6.9,
+      "aspect_ratio": 0.88,
+      "dome_to_neck": 1.16,
+      "volume_mm3": 240.7,
+      "non_sphericity_index": 0.1467,
+      "parent_tawss_pa": 2.9621,
+      "sac_tawss_pa": 0.2353,
+      "neck_tawss_pa": 0.4939,
+      "nwss": 0.0795,
+      "rrt": 11.069,
+      "lsar_relative": 0.8434,
+      "lsar_absolute": 0.8822,
+      "wss_max_pa": 28.581,
+      "mesh_cells": "cells:            511015"
     }
   ]
 }
