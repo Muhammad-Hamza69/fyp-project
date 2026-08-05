@@ -70,9 +70,22 @@
 
         const parent = poiseuilleWss(MODEL.q_m3s, MODEL.r_parent_m) * MODEL.parent_correction;
 
+        // Evaluate at a diameter CLAMPED to the calibrated range. A power law
+        // extrapolates without bound; a clamped prediction is wrong by a
+        // knowable amount (the nearest calibrated case) rather than by any
+        // amount at all. `extrapolating` still tells the caller either way.
+        const [lo, hi] = MODEL.diameter_range_mm;
+        const dEval = hi > lo ? Math.min(Math.max(d, lo), hi) : d;
+
+        // The neck-ratio coefficient is 0: neck is generated from sac radius in
+        // the calibration family, so it is collinear with dome and its
+        // coefficient was unidentifiable. Fitting it returned c = 8.34, which
+        // turned a 0.87 -> 1.00 ratio change into a 3.2x swing in NWSS and put
+        // PT-2026-0101 at 0.958 Pa against a solved 0.292 Pa. See _fit_nwss.
         const [a, b, c] = MODEL.nwss_coef;
-        const nwss = Math.min(1, Math.max(1e-4,
-            Math.exp(a + b * Math.log(d) + c * Math.log(Math.max(neckRatio, 1e-6)))));
+        let lnNwss = a + b * Math.log(Math.max(dEval, 1e-6));
+        if (c) lnNwss += c * Math.log(Math.max(neckRatio, 1e-6));
+        const nwss = Math.min(1, Math.max(1e-4, Math.exp(lnNwss)));
         const sac = parent * nwss;
 
         const [ra, rb] = MODEL.rrt_coef;
@@ -82,14 +95,15 @@
         const lsar = Math.min(1, Math.max(0, la + lb * Math.log(d)));
 
         // Extrapolation is surfaced, never hidden.
-        const [lo, hi] = MODEL.diameter_range_mm;
-        const [nlo, nhi] = MODEL.neck_ratio_range;
+        const [nlo, nhi] = MODEL.neck_ratio_range || [0, 0];
         const warnings = [];
         if (d < lo || d > hi) {
             warnings.push(`Dome diameter ${d.toFixed(1)} mm is outside the calibrated `
-                        + `${lo.toFixed(1)}–${hi.toFixed(1)} mm range; this is an extrapolation.`);
+                        + `${lo.toFixed(1)}–${hi.toFixed(1)} mm range; clamped to the `
+                        + `nearest calibrated case.`);
         }
-        if (neckRatio < nlo || neckRatio > nhi) {
+        // Only meaningful while the neck term actually contributes.
+        if (c && (neckRatio < nlo || neckRatio > nhi)) {
             warnings.push(`Neck/dome ratio ${neckRatio.toFixed(2)} is outside the calibrated `
                         + `${nlo.toFixed(2)}–${nhi.toFixed(2)} range.`);
         }

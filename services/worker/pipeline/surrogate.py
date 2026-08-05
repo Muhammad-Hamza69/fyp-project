@@ -118,8 +118,20 @@ class Surrogate:
 
         parent = poiseuille_wss(q_m3s, r_parent_m) * self.parent_correction
 
+        # Evaluate at a diameter CLAMPED to the calibrated range.
+        #
+        # A power law extrapolates without bound: outside the fitted interval it
+        # keeps going confidently in whatever direction the exponent points. A
+        # clamped prediction is wrong by a knowable amount — it is the nearest
+        # calibrated case — whereas an extrapolated one can be wrong by any
+        # amount at all. The caller is told, via `extrapolating`, either way.
+        lo_d, hi_d = self.diameter_range_mm
+        d_eval = min(max(d, lo_d), hi_d) if hi_d > lo_d else d
+
         a, b, c = self.nwss_coef
-        ln_nwss = a + b * math.log(max(d, 1e-6)) + c * math.log(max(neck_ratio, 1e-6))
+        ln_nwss = a + b * math.log(max(d_eval, 1e-6))
+        if c:                       # currently 0 — see _fit_nwss
+            ln_nwss += c * math.log(max(neck_ratio, 1e-6))
         nwss = float(np.clip(math.exp(ln_nwss), 1e-4, 1.0))
         sac = parent * nwss
 
@@ -139,7 +151,8 @@ class Surrogate:
         if d < lo or d > hi:
             out_of_range.append(f"dome diameter {d:.1f} mm is outside the calibrated "
                                 f"{lo:.1f}–{hi:.1f} mm")
-        if neck_ratio < nlo or neck_ratio > nhi:
+        if self.nwss_coef[2] and (neck_ratio < nlo or neck_ratio > nhi):
+            # Only worth reporting while the neck term actually contributes.
             out_of_range.append(f"neck/dome ratio {neck_ratio:.2f} is outside the "
                                 f"calibrated {nlo:.2f}–{nhi:.2f}")
 
@@ -223,19 +236,37 @@ class Surrogate:
 
 def _fit_nwss(pts: list[dict[str, Any]]) -> list[float]:
     """
-    ln(NWSS) = a + b·ln(dome) + c·ln(neck/dome)
+    ln(NWSS) = a + b·ln(dome)        [+ 0·ln(neck/dome)]
 
     Log-linear because the response is multiplicative: NWSS falls roughly as a
-    power of sac size, which is a straight line in log-log. With ~10 points a
-    higher-order surface would fit the noise rather than the physics.
+    power of sac size, which is a straight line in log-log.
+
+    THE NECK-RATIO TERM IS DELIBERATELY ZERO.
+    It was fitted at first and had to be removed. In this geometry family the
+    neck is generated FROM the sac radius, so neck/dome is almost perfectly
+    collinear with dome — across the whole calibration set it varies only
+    between 0.84 and 0.94. Regressing on two collinear predictors makes the
+    second coefficient unidentifiable: least squares returned c = 8.34, which
+    is not physics but noise amplified by the near-degeneracy.
+
+    The consequence was severe rather than academic. With c = 8.34 a measured
+    neck ratio of 1.00 instead of 0.87 multiplied NWSS by 3.2, and predictions
+    for real cases came out at 0.958 Pa against a solved 0.292 Pa. Dropping the
+    term removes the instability entirely and costs almost nothing, because
+    dome diameter alone already explains the response.
+
+    Restoring it needs a calibration design that varies neck INDEPENDENTLY of
+    dome — several sac sizes at each of several neck offsets — not the current
+    one-parameter family. The coefficient is kept in the signature so the model
+    file's shape does not change.
     """
     A, y = [], []
     for p in pts:
         d = p["max_diameter_mm"]
-        nr = p["neck_diameter_mm"] / d if d > 0 else 0.75
-        A.append([1.0, math.log(d), math.log(max(nr, 1e-6))])
+        A.append([1.0, math.log(d)])
         y.append(math.log(max(p["nwss"], 1e-6)))
-    return list(np.linalg.lstsq(np.array(A), np.array(y), rcond=None)[0])
+    a, b = np.linalg.lstsq(np.array(A), np.array(y), rcond=None)[0]
+    return [float(a), float(b), 0.0]
 
 
 def _fit_power(pts: list[dict[str, Any]], xk: str, yk: str) -> list[float]:
