@@ -1,0 +1,45 @@
+{
+  "parent_correction": 1.1547206736738083,
+  "nwss_coef": [
+    -2.2560158463072284,
+    0.5495045072575844,
+    8.343169044858378
+  ],
+  "rrt_coef": [
+    0.1591381888346827,
+    -1.5913329129509322
+  ],
+  "lsar_coef": [
+    0.5144988798501242,
+    0.14132800266529807
+  ],
+  "diameter_range_mm": [
+    3.02,
+    6.41
+  ],
+  "neck_ratio_range": [
+    0.8705148205928237,
+    0.9403973509933774
+  ],
+  "n_points": 4,
+  "loo_error_pct": {
+    "note": "too few points for meaningful cross-validation"
+  },
+  "source": "OpenFOAM ESI v2412 simpleFoam (steady)",
+  "osi_coef": [
+    -3.483368775509074,
+    0.7812742207696923
+  ],
+  "osi_n_points": 3,
+  "osi_max_error_pct": 4.8,
+  "osi_tawss_range": [
+    0.23258290651843805,
+    0.34601268284385645
+  ],
+  "osi_note": "OSI is calibrated on 3 full transient (pulsatile) OpenFOAM solves, not on the steady sweep. Sac OSI and sac TAWSS co-vary, so a power law in TAWSS reproduces all of them to within 4.8%. This is an empirical relation over a narrow geometry family, fitted to few points \u2014 treat it as indicative, and confirm with a transient solve before relying on it. Note: PT-2026-0101, synthetic01 averaged over less than 75% of the cycle.",
+  "poiseuille_parent_pa": 2.5623945837795152,
+  "mu_pa_s": 0.0035,
+  "rho_kg_m3": 1060.0,
+  "q_m3s": 4.6e-06,
+  "r_parent_m": 0.002
+}

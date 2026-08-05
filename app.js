@@ -805,9 +805,20 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                     + `${p.looErrorPct.sac_tawss_pa}% on sac TAWSS.`, "info");
             }
             for (const w of p.warnings) writeTerminalLog(`[WARNING] ${w}`, "warning");
-            writeTerminalLog(
-                "[NOTE] OSI and ECAP are not estimated — they are defined over a "
-                + "cardiac cycle and require a transient solve.", "info");
+            if (p.osi !== null && p.osi !== undefined) {
+                writeTerminalLog(
+                    `[RESULT] OSI ${p.osi.toFixed(5)} | ECAP ${p.ecap.toFixed(4)} — `
+                    + `calibrated on ${p.osiCalibrationPoints} transient solve(s), `
+                    + `max residual ${p.osiMaxErrorPct}%.`, "success");
+                writeTerminalLog(
+                    "[NOTE] OSI is an empirical relation over a narrow geometry "
+                    + "family fitted to few transient solves. Indicative, not "
+                    + "a substitute for a cycle-resolved solve.", "info");
+            } else {
+                writeTerminalLog(
+                    "[NOTE] OSI and ECAP not estimated — too few transient solves "
+                    + "to calibrate them.", "info");
+            }
 
             const ar = +(dome / Math.max(neck, 0.1)).toFixed(2);
             patientDatabase[patientId] = {
@@ -823,10 +834,14 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                 },
                 zones: window.NeuroSurrogate.toZones(p),
                 hemodynamics: {
-                    // Steady calibration: no cycle, so OSI/ECAP stay undefined and
-                    // the gauges render "n/a" exactly as for a steady solve.
-                    transient: false,
-                    nwss: p.nwss, rrt: p.rrt, ecap: 0,
+                    // `transient` gates whether OSI and ECAP are displayed at
+                    // all. It is true only when the surrogate actually produced
+                    // an OSI — i.e. when enough transient solves existed to
+                    // calibrate one. Otherwise the gauges show "n/a", exactly as
+                    // they do for a steady solve, rather than a placeholder zero.
+                    transient: p.osi !== null && p.osi !== undefined,
+                    nwss: p.nwss, rrt: p.rrt,
+                    ecap: p.ecap || 0,
                     lsarRelative: p.lsarRelative, lsarAbsolute: p.lsarRelative,
                 },
                 provenance: {

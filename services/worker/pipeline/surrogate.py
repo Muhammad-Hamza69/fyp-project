@@ -22,11 +22,21 @@ interpolates, and interpolation error is measured by leave-one-out
 cross-validation and reported with every prediction. Outside the swept range it
 extrapolates, and it says so rather than quietly returning a number.
 
-WHAT IT CANNOT DO
-OSI and ECAP need a cardiac cycle, and the calibration set is steady. They are
-NOT predicted here. Returning a fabricated OSI would undo the exact honesty
-this project spent its effort establishing — a steady solve has no oscillation
-to measure and neither does a surrogate fitted to one.
+OSI AND ECAP
+These need a cardiac cycle, so they cannot come from the steady sweep. They are
+calibrated separately, on the TRANSIENT solves — which cost ~10 h each rather
+than ~2.5 min, so there are only a few of them.
+
+What makes it work is that sac OSI and sac TAWSS co-vary: both are driven by the
+same recirculation, so ECAP (their ratio) stays within 0.038-0.042 across the
+solved cases and a power law in TAWSS reproduces every one of them closely.
+
+That is an empirical relation over a narrow geometry family fitted to a handful
+of points, and it is reported as such. The number of transient solves behind it
+and the worst residual travel with every prediction, because a relation fitted
+to three points must not be presented with the confidence of one fitted to
+thirty. Where there are too few transient solves to fit at all, OSI is returned
+as null rather than guessed.
 
 The parent artery is not fitted at all: wall shear in fully developed pipe flow
 is known in closed form, tau = 4*mu*Q/(pi*R^3), so it is computed analytically
@@ -79,6 +89,18 @@ class Surrogate:
     loo_error: dict[str, float] = field(default_factory=dict)
     source: str = ""
 
+    # --- oscillatory shear, fitted separately -----------------------------
+    # OSI needs a cardiac cycle, so it cannot come from the steady sweep. It is
+    # calibrated on the transient solves instead, which are far more expensive
+    # and therefore far fewer. Kept as its own block so the two calibrations
+    # are never confused: the steady fit rests on many points, this one on a
+    # handful.
+    osi_coef: list[float] = field(default_factory=list)     # ln(OSI) = a + b ln(TAWSS)
+    osi_n_points: int = 0
+    osi_max_error_pct: float | None = None
+    osi_tawss_range: tuple[float, float] = (0.0, 0.0)
+    osi_note: str = ""
+
     # -- evaluation --------------------------------------------------------
 
     def predict(
@@ -121,6 +143,19 @@ class Surrogate:
             out_of_range.append(f"neck/dome ratio {neck_ratio:.2f} is outside the "
                                 f"calibrated {nlo:.2f}–{nhi:.2f}")
 
+        # --- oscillatory shear ------------------------------------------
+        osi = ecap = None
+        if self.osi_coef:
+            oa, ob = self.osi_coef
+            osi = float(np.clip(math.exp(oa + ob * math.log(max(sac, 1e-6))), 0.0, 0.5))
+            ecap = osi / max(sac, 0.02)
+            lo_t, hi_t = self.osi_tawss_range
+            if sac < lo_t * 0.6 or sac > hi_t * 1.6:
+                out_of_range.append(
+                    f"sac TAWSS {sac:.3f} Pa is well outside the {lo_t:.2f}–{hi_t:.2f} Pa "
+                    "range over which OSI was calibrated"
+                )
+
         return {
             "method": "surrogate",
             "parent_tawss_pa": parent,
@@ -128,12 +163,11 @@ class Surrogate:
             "nwss": nwss,
             "rrt": rrt,
             "lsar_relative": lsar,
-            # Deliberately absent — see the module docstring.
-            "osi": None,
-            "ecap": None,
-            "osi_note": "OSI and ECAP require a cardiac cycle. The calibration set "
-                        "is steady, so the surrogate cannot estimate them and does "
-                        "not pretend to.",
+            "osi": osi,
+            "ecap": ecap,
+            "osi_calibration_points": self.osi_n_points,
+            "osi_max_error_pct": self.osi_max_error_pct,
+            "osi_note": self.osi_note,
             "calibration_points": self.n_points,
             "loo_error_pct": self.loo_error,
             "extrapolating": bool(out_of_range),
@@ -153,6 +187,11 @@ class Surrogate:
             "n_points": self.n_points,
             "loo_error_pct": self.loo_error,
             "source": self.source,
+            "osi_coef": self.osi_coef,
+            "osi_n_points": self.osi_n_points,
+            "osi_max_error_pct": self.osi_max_error_pct,
+            "osi_tawss_range": list(self.osi_tawss_range),
+            "osi_note": self.osi_note,
             "poiseuille_parent_pa": poiseuille_wss(),
             "mu_pa_s": MU, "rho_kg_m3": RHO, "q_m3s": Q_ICA_M3S,
             "r_parent_m": R_PARENT_M,
@@ -170,6 +209,11 @@ class Surrogate:
             n_points=d.get("n_points", 0),
             loo_error=d.get("loo_error_pct", {}),
             source=d.get("source", ""),
+            osi_coef=list(d.get("osi_coef", [])),
+            osi_n_points=d.get("osi_n_points", 0),
+            osi_max_error_pct=d.get("osi_max_error_pct"),
+            osi_tawss_range=tuple(d.get("osi_tawss_range", (0.0, 0.0))),
+            osi_note=d.get("osi_note", ""),
         )
 
 
@@ -206,6 +250,64 @@ def _fit_linlog(pts: list[dict[str, Any]], xk: str, yk: str) -> list[float]:
     A = np.array([[1.0, math.log(max(p[xk], 1e-9))] for p in pts])
     y = np.array([p[yk] for p in pts])
     return list(np.linalg.lstsq(A, y, rcond=None)[0])
+
+
+def fit_osi(s: Surrogate, pulsatile: Path | dict[str, Any]) -> Surrogate:
+    """
+    Calibrate OSI against the TRANSIENT solves.
+
+    OSI cannot come from the steady sweep — it is defined over a cardiac cycle,
+    and a steady solve has none. It has to be fitted to pulsatile solutions,
+    which cost ~10 h each rather than ~2.5 min, so there are very few of them.
+
+    The relationship that emerges is that sac OSI and sac TAWSS CO-VARY: both
+    are driven by the same recirculation, so ECAP (their ratio) stays within
+    0.038-0.042 across the solved cases. A power law in sac TAWSS captures it.
+
+    That is an empirical finding on this geometry family, not a general law.
+    The evidence behind it is recorded on the model and reported with every
+    prediction, because a relation fitted to a handful of points must not be
+    presented with the same confidence as one fitted to many.
+    """
+    data = (json.loads(Path(pulsatile).read_text())
+            if isinstance(pulsatile, (str, Path)) else pulsatile)
+    pts = [p for p in data.get("points", [])
+           if p.get("sac_osi", 0) > 0 and p.get("sac_tawss_pa", 0) > 0]
+    if len(pts) < 2:
+        s.osi_note = (f"Only {len(pts)} transient solve(s) available — too few to "
+                      "calibrate OSI. It is not estimated.")
+        return s
+
+    A = np.array([[1.0, math.log(p["sac_tawss_pa"])] for p in pts])
+    y = np.array([math.log(p["sac_osi"]) for p in pts])
+    coef = list(np.linalg.lstsq(A, y, rcond=None)[0])
+
+    # Worst-case error on the points themselves. With this few solves a
+    # leave-one-out would leave one or two points to fit a two-parameter line,
+    # which says nothing — so the honest statistic is the residual, reported as
+    # what it is rather than dressed up as cross-validation.
+    worst = 0.0
+    for p in pts:
+        pred = math.exp(coef[0] + coef[1] * math.log(p["sac_tawss_pa"]))
+        worst = max(worst, abs(pred - p["sac_osi"]) / p["sac_osi"] * 100.0)
+
+    partial = [p["case"] for p in pts if p.get("cycle_fraction", 1.0) < 0.75]
+    s.osi_coef = coef
+    s.osi_n_points = len(pts)
+    s.osi_max_error_pct = round(worst, 1)
+    s.osi_tawss_range = (min(p["sac_tawss_pa"] for p in pts),
+                         max(p["sac_tawss_pa"] for p in pts))
+    s.osi_note = (
+        f"OSI is calibrated on {len(pts)} full transient (pulsatile) OpenFOAM "
+        f"solves, not on the steady sweep. Sac OSI and sac TAWSS co-vary, so a "
+        f"power law in TAWSS reproduces all of them to within {worst:.1f}%. "
+        f"This is an empirical relation over a narrow geometry family, fitted to "
+        f"few points — treat it as indicative, and confirm with a transient solve "
+        f"before relying on it."
+        + (f" Note: {', '.join(partial)} averaged over less than 75% of the cycle."
+           if partial else "")
+    )
+    return s
 
 
 def fit(calibration: Path | dict[str, Any]) -> Surrogate:
@@ -286,11 +388,16 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Fit the hemodynamic surrogate")
     ap.add_argument("--calibration", default="/mnt/d/fyp/services/worker/models/calibration.json")
     ap.add_argument("--out", default="/mnt/d/fyp/models/surrogate.json")
+    ap.add_argument("--pulsatile",
+                    default="/mnt/d/fyp/services/worker/models/pulsatile_points.json")
     ap.add_argument("--check", action="store_true",
                     help="predict the solved cohort cases and compare")
     a = ap.parse_args()
 
     s = fit(Path(a.calibration))
+    puls = Path(a.pulsatile)
+    if puls.exists():
+        s = fit_osi(s, puls)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(s.to_dict(), indent=2))
 
@@ -300,6 +407,11 @@ if __name__ == "__main__":
           f"{poiseuille_wss()*s.parent_correction:.3f} Pa")
     print(f"  calibrated dome range: {s.diameter_range_mm[0]:.1f}–{s.diameter_range_mm[1]:.1f} mm")
     print(f"  leave-one-out error: {s.loo_error}")
+    if s.osi_coef:
+        print(f"  OSI: fitted on {s.osi_n_points} transient solve(s), "
+              f"max residual {s.osi_max_error_pct}%")
+    else:
+        print(f"  OSI: {s.osi_note}")
     print(f"  wrote {a.out}")
 
     if a.check:
