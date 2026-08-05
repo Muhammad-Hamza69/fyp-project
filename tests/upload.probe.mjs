@@ -56,6 +56,7 @@ window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
 await new Promise((r) => setTimeout(r, 300));
 
 const $ = (id) => window.document.getElementById(id);
+const t0 = Date.now();
 const before = window.document.querySelectorAll(".patient-card").length;
 console.log(`  patient cards before upload: ${before}`);
 
@@ -89,6 +90,7 @@ const modalOpen = $("simulation-modal") && !$("simulation-modal").classList.cont
 console.log(`  modal open when form shown: ${modalOpen}   <- must be true or the form is invisible`);
 
 const card = $("morphology-prompt");
+console.log(`  time to form: ${((Date.now()-t0)/1000).toFixed(1)} s`);
 console.log(`  morphology prompt visible: ${card && !card.classList.contains("hidden")}`);
 console.log(`  dome prefilled: ${$("morph-dome") ? $("morph-dome").value : "n/a"}`);
 console.log(`  neck prefilled: ${$("morph-neck") ? $("morph-neck").value : "n/a"}`);

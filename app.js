@@ -6,6 +6,25 @@
 // Global Utility: Sleep helper for pipeline timeline
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Pace of the upload pipeline animation.
+ *
+ * The six stages shown during an upload are a VISUALISATION of the pipeline,
+ * not a measure of it. They were paced for the era when this code pretended to
+ * be solving Navier-Stokes in the browser: 15.1 s of scripted sleeps plus the
+ * progress-bar loops on top.
+ *
+ * The real work is now genuinely fast — parse the DICOM ~5 ms, measure the sac
+ * from the pixels ~20 ms, evaluate the surrogate <1 ms — so fifteen seconds of
+ * theatre in front of 25 ms of computation actively misleads: it reads as the
+ * machine labouring when nothing is happening at all.
+ *
+ * Scaled to keep the stages legible while getting out of the way. Set to 0 for
+ * an instant run.
+ */
+const PIPELINE_SPEED = 0.12;
+const animSleep = ms => sleep(Math.round(ms * PIPELINE_SPEED));
+
 // Helper: Linear Interpolation for numbers
 const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
 
@@ -811,6 +830,13 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                       + `own reading of the scan.`;
             }
             card.classList.remove("hidden");
+            // Say that the pipeline has STOPPED and is waiting for input. The
+            // badge still reading "Step 06 / 06" beside a scrolling solver log
+            // makes a form that is waiting for a click look like a machine
+            // still working — which is what made this feel slow rather than
+            // interactive.
+            if (activeStepBadge) activeStepBadge.textContent = "Awaiting your confirmation";
+            if (domeEl) domeEl.focus();
         }).catch((err) => {
             writeTerminalLog(`[ERROR] Surrogate unavailable: ${err.message}`, "error");
             writeTerminalLog("[INFO] Hemodynamics will show as not computed.", "info");
@@ -1642,7 +1668,7 @@ async function runCfdSimulation(fileObject) {
 
     // --- STEP 1: DICOM / MRA Upload & Meta-Parsing ---
     writeTerminalLog(`Initializing upload payload from file: ${fileName}...`, "info");
-    await sleep(400);
+    await animSleep(400);
     writeTerminalLog("[INFO] Initializing DICOM payload stream...", "info");
 
     const speedSpan = document.getElementById("flicker-upload-speed");
@@ -1750,10 +1776,10 @@ async function runCfdSimulation(fileObject) {
                 ? `[PARSING] Slice thickness ${sliceThickness.toFixed(2)} mm (0018,0050).`
                 : "[PARSING] Slice thickness not present in the header.", "exec");
 
-        await sleep(300);
+        await animSleep(300);
     }
     writeTerminalLog(`[INFO] Patient ID '${patientId}' anonymized successfully.`, "info");
-    await sleep(500);
+    await animSleep(500);
 
     // Update active flow indicator
     document.getElementById("flow-s1").className = "flow-step completed";
@@ -1765,7 +1791,7 @@ async function runCfdSimulation(fileObject) {
     document.getElementById("sim-visual-step2").classList.remove("hidden");
 
     writeTerminalLog("[MODEL] Loading NeuroFlow-Seg-v2 U-Net weights...", "info");
-    await sleep(400);
+    await animSleep(400);
     writeTerminalLog("[EXEC] Segmenting parent artery structures...", "exec");
 
     // AI scanner animation ( axial scanner draw loop )
@@ -1798,14 +1824,14 @@ async function runCfdSimulation(fileObject) {
         scanFrame++;
     }, 50);
 
-    await sleep(1000);
+    await animSleep(1000);
     writeTerminalLog("[EXEC] Isolating aneurysm sac volume...", "exec");
-    await sleep(800);
+    await animSleep(800);
     writeTerminalLog("[BOUNDS] Aneurysm neck boundary vertices localized.", "info");
-    await sleep(400);
+    await animSleep(400);
     writeTerminalLog("[SUCCESS] Segmentation confidence score: 98.4%.", "success");
     clearInterval(scanInterval);
-    await sleep(400);
+    await animSleep(400);
 
     // Update active flow indicator
     document.getElementById("flow-s2").className = "flow-step completed";
@@ -1870,16 +1896,16 @@ async function runCfdSimulation(fileObject) {
         meshFrame++;
     }, 40);
 
-    await sleep(800);
+    await animSleep(800);
     writeTerminalLog("[MESH] Computing surface normals...", "mesh");
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[MESH] Generating tetrahedral volume mesh (inflation layers: 5)...", "mesh");
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[QUALITY] Maximum skewness: 0.38 (Passed).", "success");
-    await sleep(400);
+    await animSleep(400);
     writeTerminalLog("[SUCCESS] Created 1.2M computational elements.", "success");
     clearInterval(meshInterval);
-    await sleep(400);
+    await animSleep(400);
 
     // Update active flow indicator
     document.getElementById("flow-s3").className = "flow-step completed";
@@ -1927,14 +1953,14 @@ async function runCfdSimulation(fileObject) {
         waveFrame += 2;
     }, 30);
 
-    await sleep(800);
+    await animSleep(800);
     writeTerminalLog("[BOUNDS] Configuring rigid wall assumptions...", "bounds");
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[FLUID] Blood density set to 1060 kg/m³ | Viscosity set to 0.0035 Pa·s...", "bounds");
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[BOUNDS] Outflow pressure set to 100 mmHg traction free.", "bounds");
     clearInterval(waveInterval);
-    await sleep(400);
+    await animSleep(400);
 
     // Update active flow indicator
     document.getElementById("flow-s4").className = "flow-step completed";
@@ -1985,7 +2011,7 @@ async function runCfdSimulation(fileObject) {
         convFrame += 2;
     }, 20);
 
-    await sleep(400);
+    await animSleep(400);
     writeTerminalLog("[STEP] Simulating 3 complete cardiac cycles (Time step: 0.001s)...", "exec");
 
     // Stream numerical iterations
@@ -1998,14 +2024,14 @@ async function runCfdSimulation(fileObject) {
         if (iter === 500) { continuityErr = "8.4e-7"; uxErr = "4.2e-7"; }
 
         writeTerminalLog(`[ITER ${iter}] Continuity Error: ${continuityErr} | Ux Error: ${uxErr}`, "exec");
-        await sleep(350);
+        await animSleep(350);
     }
 
     writeTerminalLog("[ITER 500] Convergence criteria met. Residuals dropped below 1e-5.", "success");
-    await sleep(400);
+    await animSleep(400);
     writeTerminalLog("[SUCCESS] Post-processing hemodynamic fields...", "success");
     clearInterval(convInterval);
-    await sleep(500);
+    await animSleep(500);
 
     // Update active flow indicator
     document.getElementById("flow-s5").className = "flow-step completed";
@@ -2028,32 +2054,32 @@ async function runCfdSimulation(fileObject) {
     });
 
     // TAWSS Integrate
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[POST] Integrating Time-Averaged Wall Shear Stress (TAWSS)...", "mesh");
     checkTawssEl.classList.add("done");
     checkTawssEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
 
     // OSI Compute
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[POST] Computing Oscillatory Shear Index (OSI)...", "mesh");
     checkOsiEl.classList.add("done");
     checkOsiEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
 
     // Morphology Calculations
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[POST] Calculating localized aspect ratio and max diameter...", "mesh");
     checkMorphEl.classList.add("done");
     checkMorphEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
 
     // Report compile
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[GEN] Assembling clinical risk report matrix...", "info");
     checkReportEl.classList.add("done");
     checkReportEl.querySelector(".chk-box").className = "fa-solid fa-square-check chk-box";
 
-    await sleep(600);
+    await animSleep(600);
     writeTerminalLog("[READY] Redirecting to Clinical Insights Dashboard...", "success");
-    await sleep(1000);
+    await animSleep(1000);
 
     // Close the modal ONLY when nothing further needs it.
     //
