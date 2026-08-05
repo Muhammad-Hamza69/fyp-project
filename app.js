@@ -117,8 +117,17 @@ function clamp01(v) {
  * point of not printing 0.00.
  */
 function setGaugeNote(valueEl, text) {
-    if (!valueEl || !valueEl.parentElement) return;
-    let note = valueEl.parentElement.querySelector(".gauge-note");
+    if (!valueEl) return;
+
+    // Attach to the CARD, not to the value's own parent. That parent is
+    // `.radial-progress-text`, an absolutely-positioned overlay centred inside
+    // the 80px ring — appending there wrapped the sentence into the middle of
+    // the doughnut, on top of the value it was explaining. The note belongs
+    // under the whole gauge.
+    const card = valueEl.closest(".metric-card") || valueEl.parentElement;
+    if (!card) return;
+
+    let note = card.querySelector(":scope > .gauge-note");
     if (!text) {
         if (note) note.remove();
         return;
@@ -126,7 +135,7 @@ function setGaugeNote(valueEl, text) {
     if (!note) {
         note = document.createElement("div");
         note.className = "gauge-note";
-        valueEl.parentElement.appendChild(note);
+        card.appendChild(note);
     }
     note.textContent = text;
 }
@@ -200,14 +209,36 @@ function getRiskTier(score) {
 // hemodynamic markers derived from the same dome TAWSS/OSI, used in current CFD
 // rupture-risk literature alongside TAWSS/OSI (see project research notes).
 // RRT ~ 1 / ((1 - 2*OSI) * TAWSS); guarded against the OSI->0.5 singularity.
-function computeRRT(domeZone) {
+function computeRRT(domeZone, patient) {
+    // Prefer the solver's AREA-WEIGHTED value when the case has one.
+    //
+    // RRT is non-linear in TAWSS and OSI, so by Jensen's inequality the mean of
+    // the function is not the function of the means. Evaluating 1/((1-2·OSI)·TAWSS)
+    // at the sac's AVERAGE shear systematically under-reports residence time,
+    // because the reciprocal is convex. The gap is not cosmetic — on this cohort
+    // it is 11.07 vs 4.25, 21.35 vs 7.10 and 7.17 vs 2.94.
+    //
+    // It mattered clinically too: PT-2026-0103 read 2.94 here, below the 3.0
+    // threshold, so no alert fired — while its true area-weighted RRT is 7.17.
+    // The PDF report and the methods document had been quoting the correct
+    // figure all along, so the dashboard was the one disagreeing.
+    const aw = patient && patient.hemodynamics && patient.hemodynamics.rrt;
+    if (typeof aw === "number" && aw > 0) return aw;
+
+    // Demonstration cases carry no solver output; the closed form is all there is.
     const denom = Math.max(0.02, (1 - 2 * domeZone.osi) * domeZone.tawss);
     return 1 / denom;
 }
 
 // ECAP = OSI / TAWSS - values above ~1.0 mean the oscillatory component
 // dominates over mean shear, a marker associated with elevated rupture risk.
-function computeECAP(domeZone) {
+function computeECAP(domeZone, patient) {
+    // Area-weighted where available, for the same reason as RRT above:
+    // ECAP = OSI/TAWSS is non-linear, and evaluating it at the means gave
+    // 0.024 against a true 0.173 for PT-2026-0103 — a factor of seven.
+    const aw = patient && patient.hemodynamics && patient.hemodynamics.ecap;
+    if (typeof aw === "number" && aw > 0) return aw;
+
     return domeZone.osi / Math.max(0.02, domeZone.tawss);
 }
 
@@ -941,7 +972,7 @@ function updateRadialGauges() {
     }
 
     // 4. RRT Gauge (Dome value) - Relative Residence Time
-    const rrtVal = computeRRT(domeZone);
+    const rrtVal = computeRRT(domeZone, activePatient);
     rrtGaugeValEl.textContent = cfdOk ? rrtVal.toFixed(2) : "n/a";
     rrtGaugeValEl.classList.toggle("gauge-not-computed", !cfdOk);
     setGaugeNote(rrtGaugeValEl, cfdOk ? "" : "no CFD solve for this case");
@@ -965,7 +996,7 @@ function updateRadialGauges() {
     // ECAP = OSI / TAWSS, so it inherits OSI's dependence on a cardiac cycle
     // exactly. On a steady solve it is 0/TAWSS = 0 for the same reason, and is
     // just as meaningless.
-    const ecapVal = computeECAP(domeZone);
+    const ecapVal = computeECAP(domeZone, activePatient);
     ecapGaugeValEl.textContent = osiComputed ? ecapVal.toFixed(2) : "n/a";
     ecapGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed);
     setGaugeNote(ecapGaugeValEl, osiComputed ? "" : "requires OSI");
@@ -1192,13 +1223,13 @@ function openReportModal() {
         ? `<span class="color-high-risk">Elongated (&gt;1.5)</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
-    const rrtVal = computeRRT(domeZone);
+    const rrtVal = computeRRT(domeZone, activePatient);
     reportRrtValEl.textContent = `${rrtVal.toFixed(2)} Pa⁻¹`;
     reportRrtStatusEl.innerHTML = rrtVal > 3.0
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> Elevated Residence</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
-    const ecapVal = computeECAP(domeZone);
+    const ecapVal = computeECAP(domeZone, activePatient);
     reportEcapValEl.textContent = ecapVal.toFixed(2);
     reportEcapStatusEl.innerHTML = ecapVal > 1.0
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> High Activation</span>`

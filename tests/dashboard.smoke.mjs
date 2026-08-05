@@ -197,6 +197,55 @@ if (cards.length) {
           (txt("rrt-gauge-val") || "") !== "" && (txt("phases-total-points") || "") !== "");
 }
 
+// --- RRT / ECAP must match the solver, not be recomputed from means ---------
+//
+// Both are non-linear in TAWSS and OSI, so by Jensen's inequality evaluating
+// them at the sac's MEAN shear is not the same as averaging them over the sac.
+// The dashboard used to do the former while the PDF report and the methods
+// document quoted the latter: 4.25 against 11.07, 7.10 against 21.35, 2.94
+// against 7.17. The last of those sat below the 3.0 alert threshold, so a case
+// whose true residence time should have flagged showed as normal.
+{
+    const pats = patients.patients || patients;
+    const computed = pats.filter((p) => p.hemodynamics && p.hemodynamics.rrt > 0);
+    check("cohort has solver RRT to compare against", computed.length > 0);
+
+    for (const p of computed) {
+        for (const card of window.document.querySelectorAll(".patient-card")) {
+            if ((card.dataset.id || "") === p.id) {
+                card.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+            }
+        }
+        const shown = parseFloat(txt("rrt-gauge-val"));
+        check(`RRT matches the solver for ${p.id}`,
+              Math.abs(shown - p.hemodynamics.rrt) < 0.02,
+              `shown ${shown}, solver ${p.hemodynamics.rrt}`);
+
+        if (p.hemodynamics.transient && p.hemodynamics.ecap > 0) {
+            const e = parseFloat(txt("ecap-gauge-val"));
+            check(`ECAP matches the solver for ${p.id}`,
+                  Math.abs(e - p.hemodynamics.ecap) < 0.02,
+                  `shown ${e}, solver ${p.hemodynamics.ecap}`);
+        }
+    }
+}
+
+// --- gauge notes sit under the card, not inside the ring --------------------
+//
+// `.radial-progress-text` is an absolutely-positioned overlay centred in an
+// 80px doughnut. Appending the "steady solve — no cardiac cycle" caption there
+// wrapped it into the middle of the ring, on top of the value it explains.
+{
+    const notes = window.document.querySelectorAll(".gauge-note");
+    check("gauge notes render for uncomputed values", notes.length >= 0);
+    let inRing = 0;
+    for (const n of notes) {
+        if (n.closest(".radial-progress-text") || n.closest(".radial-progress-container")) inRing++;
+    }
+    check("no gauge note is nested inside the progress ring", inRing === 0,
+          `${inRing} note(s) inside .radial-progress-container`);
+}
+
 // --- DICOM parsing --------------------------------------------------------
 //
 // The upload handler used to read files with readAsText() and regex out

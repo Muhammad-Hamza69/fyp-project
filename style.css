@@ -638,12 +638,15 @@ body {
     opacity: 0.75;
 }
 
+/* Sits under the whole gauge card, not inside the ring. Centred and full
+   width so a short sentence reads as a caption rather than as a value. */
 .gauge-note {
-    margin-top: 3px;
+    margin-top: 6px;
+    padding: 0 4px;
     font-size: 9.5px;
-    line-height: 1.3;
+    line-height: 1.35;
     color: var(--text-secondary);
-    opacity: 0.85;
+    opacity: 0.9;
     text-align: center;
 }
 
