@@ -2374,3 +2374,11 @@ body {
     line-height: 1.45;
     color: #94a3b8;
 }
+
+/* A surrogate estimate, not a solve result. Amber and lighter than a measured
+   value so the two can never be mistaken for each other at a glance; the "~"
+   prefix carries the same message in the number itself. */
+.gauge-estimated {
+    color: var(--color-mod-risk, #C47D1A);
+    font-weight: 600;
+}

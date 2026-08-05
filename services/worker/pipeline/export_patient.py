@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
+import re
 from pathlib import Path
 from typing import Any
 
@@ -162,6 +163,42 @@ def _grep(path: Path, pattern: str, default: str = "") -> str:
         return default
 
 
+def _cycle_coverage(case_dir: Path) -> dict[str, Any]:
+    """
+    Fraction of the cardiac cycle the fieldAverage window actually spans.
+
+    Read from the case rather than assumed: `timeStart` in controlDict is where
+    averaging began, and the latest written time is where it stopped. A solve
+    that was interrupted reports honestly rather than looking complete.
+    """
+    try:
+        cd = (case_dir / "system" / "controlDict").read_text(errors="ignore")
+        m = re.search(r"timeStart\s+([0-9.eE+-]+)", cd)
+        if not m:
+            return {}
+        t0 = float(m.group(1))
+        times = sorted(
+            (float(d.name) for d in case_dir.iterdir()
+             if d.is_dir() and re.fullmatch(r"[0-9]+\.[0-9]+", d.name)),
+        )
+        if not times:
+            return {}
+        t1 = times[-1]
+        end = re.search(r"^endTime\s+([0-9.eE+-]+);", cd, flags=re.M)
+        cycle = float(end.group(1)) if end else 0.90
+        frac = max(0.0, (t1 - t0)) / cycle if cycle > 0 else 0.0
+        return {
+            "avgWindow": [round(t0, 4), round(t1, 4)],
+            "cycleFraction": round(min(frac, 1.0), 3),
+            # Convention is to average over a whole cycle (ideally the last of
+            # two or three). Below this the value is indicative, not a
+            # cycle-average, and the dashboard says so.
+            "cycleComplete": bool(frac >= 0.75),
+        }
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def build_patient(
     case_dir: Path, patient_id: str, demographics: dict[str, Any]
 ) -> dict[str, Any]:
@@ -237,6 +274,15 @@ def build_patient(
             "meanVelocityMs": round(e.mean_inlet_velocity_ms, 4),
             "wssStdPa": round(e.sac.wss_std_pa, 4),
             "transient": e.transient,
+            # How much of the cardiac cycle the averaging actually covered.
+            #
+            # OSI is a cycle average, so one taken over 43% of a beat is not the
+            # same quantity as one taken over 89% — it misses late diastole,
+            # where the flow is slow and reversal behaves differently. A run
+            # stopped early still writes complete, plausible-looking averaged
+            # fields, so without this the two are indistinguishable in the
+            # output and a partial average would be read as a full one.
+            **_cycle_coverage(case_dir),
         }
     except Exception as exc:  # noqa: BLE001
         engine_extras = {"engineError": f"{exc.__class__.__name__}: {exc}"}

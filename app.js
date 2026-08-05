@@ -149,6 +149,46 @@ function setGaugeNote(valueEl, text) {
  * a critical finding manufactured out of absent data. Every hemodynamic gauge
  * checks this before displaying a number.
  */
+/**
+ * Surrogate OSI/ECAP for a case that was solved STEADY.
+ *
+ * A steady solve produces no OSI — there is no cycle to measure. Until now
+ * those cases showed "n/a" and nothing else, which is honest but unhelpful when
+ * a usable estimate exists. The surrogate is calibrated on the transient solves
+ * and can supply one from the sac's TAWSS.
+ *
+ * Returned separately from the measured values, never merged into them: the
+ * gauges mark an estimate distinctly so nobody reads it as a solve result. The
+ * Composite Risk Index is deliberately NOT recomputed from it — and it happens
+ * not to matter, because every estimate this produces (~0.005-0.013) sits below
+ * the 0.03 floor of the OSI risk normalisation and would score zero anyway.
+ */
+function estimateOsi(patient) {
+    if (!patient || !window.NeuroSurrogate || !window.NeuroSurrogate.isLoaded()) return null;
+    // Only for cases that HAVE a solve but lack a cycle. An upload with no
+    // solve at all is handled on its own path.
+    if (patient.awaitingCfd) return null;
+    if (hemodynamicsAreTransient(patient)) return null;      // already measured
+
+    const m = patient.morphology || {};
+    if (!m.maxDiameter) return null;
+    try {
+        const p = window.NeuroSurrogate.predict({
+            maxDiameterMm: m.maxDiameter,
+            neckDiameterMm: m.neckDiameterMm,
+        });
+        if (p.osi === null || p.osi === undefined) return null;
+        return {
+            osi: p.osi,
+            ecap: p.ecap,
+            points: p.osiCalibrationPoints,
+            maxErrorPct: p.osiMaxErrorPct,
+            extrapolating: p.extrapolating,
+            warnings: p.warnings,
+        };
+    } catch { return null; }
+}
+
 function cfdIsComputed(patient) {
     return !(patient && patient.awaitingCfd);
 }
@@ -480,6 +520,16 @@ async function loadRealCfdCases() {
 // Initialize Application
 async function initApp() {
     const nReal = await loadRealCfdCases();
+
+    // Preload the surrogate so the gauges, which run synchronously, can fall
+    // back to an ESTIMATE for cases that were solved steady and therefore have
+    // no OSI of their own. Failure is non-fatal: those gauges then show "n/a"
+    // exactly as before.
+    if (window.NeuroSurrogate) {
+        try { await window.NeuroSurrogate.load(); } catch (err) {
+            console.warn("[NeuroFlow] surrogate unavailable:", err.message);
+        }
+    }
 
     renderPatientList();
     loadPatientData(activePatient);
@@ -1150,19 +1200,45 @@ function updateRadialGauges() {
     // the dashboard, and every gauge past this line silently kept its last
     // value — which read as "computed 0.00" rather than "never ran".
     const osiComputed = cfdOk && hemodynamicsAreTransient(activePatient);
-    const osiVal = domeZone.osi;
-    osiGaugeValEl.textContent = osiComputed ? osiVal.toFixed(2) : "n/a";
-    osiGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed);
-    setGaugeNote(osiGaugeValEl, osiComputed ? "" : "steady solve — no cardiac cycle");
+    const osiEst = osiComputed ? null : estimateOsi(activePatient);
+    const osiVal = osiEst ? osiEst.osi : domeZone.osi;
+
+    if (osiComputed) {
+        osiGaugeValEl.textContent = osiVal.toFixed(2);
+        // A cycle average taken over part of a beat is not the same quantity as
+        // one taken over all of it — it misses late diastole. An interrupted
+        // solve still writes complete-looking averaged fields, so without this
+        // the two are indistinguishable on screen.
+        const h = activePatient.hemodynamics || {};
+        const partial = h.cycleComplete === false && typeof h.cycleFraction === "number";
+        setGaugeNote(osiGaugeValEl, partial
+            ? `averaged over ${Math.round(h.cycleFraction * 100)}% of the cardiac `
+              + `cycle — indicative, not a full-cycle average`
+            : "");
+        osiGaugeValEl.classList.toggle("gauge-estimated", partial);
+    } else if (osiEst) {
+        // "~" marks it as an estimate at a glance; the note says what it rests
+        // on. A measured value and a surrogate one must never look alike.
+        osiGaugeValEl.textContent = "~" + osiVal.toFixed(3);
+        setGaugeNote(osiGaugeValEl,
+            `estimated — no cycle solved for this case (surrogate, `
+            + `${osiEst.points} transient solves, ±${osiEst.maxErrorPct}%)`
+            + (osiEst.extrapolating ? " · outside calibrated range" : ""));
+    } else {
+        osiGaugeValEl.textContent = "n/a";
+        setGaugeNote(osiGaugeValEl, "steady solve — no cardiac cycle");
+    }
+    osiGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed && !osiEst);
+    if (osiEst) osiGaugeValEl.classList.add("gauge-estimated");
 
     // Map OSI progress ring: Max OSI range 0.5
     osiProgressFill.style.strokeDasharray = progressCircumference;
-    const osiFactor = osiComputed ? Math.min(1.0, osiVal / 0.5) : 0;
+    const osiFactor = (osiComputed || osiEst) ? Math.min(1.0, osiVal / 0.5) : 0;
     osiProgressFill.style.strokeDashoffset = progressCircumference - (osiFactor * progressCircumference);
 
     // OSI Threshold alert check (> 0.3). An uncomputed OSI must not clear the
     // alert either — absence of evidence is not evidence of a safe value.
-    if (osiComputed && osiVal > 0.3) {
+    if ((osiComputed || osiEst) && osiVal > 0.3) {
         osiProgressFill.style.stroke = "var(--color-high-risk)";
         osiAlertEl.classList.remove("hidden");
     } else {
@@ -1196,18 +1272,27 @@ function updateRadialGauges() {
     // ECAP = OSI / TAWSS, so it inherits OSI's dependence on a cardiac cycle
     // exactly. On a steady solve it is 0/TAWSS = 0 for the same reason, and is
     // just as meaningless.
-    const ecapVal = computeECAP(domeZone, activePatient);
-    ecapGaugeValEl.textContent = osiComputed ? ecapVal.toFixed(2) : "n/a";
-    ecapGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed);
-    setGaugeNote(ecapGaugeValEl, osiComputed ? "" : "requires OSI");
+    const ecapVal = osiEst ? osiEst.ecap : computeECAP(domeZone, activePatient);
+    if (osiComputed) {
+        ecapGaugeValEl.textContent = ecapVal.toFixed(2);
+        setGaugeNote(ecapGaugeValEl, "");
+    } else if (osiEst) {
+        ecapGaugeValEl.textContent = "~" + ecapVal.toFixed(3);
+        setGaugeNote(ecapGaugeValEl, "estimated from the surrogate OSI");
+    } else {
+        ecapGaugeValEl.textContent = "n/a";
+        setGaugeNote(ecapGaugeValEl, "requires OSI");
+    }
+    ecapGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed && !osiEst);
+    ecapGaugeValEl.classList.toggle("gauge-estimated", !!osiEst);
 
     // Map ECAP progress ring: display range 0-2.0
     ecapProgressFill.style.strokeDasharray = progressCircumference;
-    const ecapFactor = osiComputed ? Math.min(1.0, ecapVal / 2.0) : 0;
+    const ecapFactor = (osiComputed || osiEst) ? Math.min(1.0, ecapVal / 2.0) : 0;
     ecapProgressFill.style.strokeDashoffset = progressCircumference - (ecapFactor * progressCircumference);
 
     // ECAP Threshold alert check (> 1.0 - oscillatory component exceeds mean shear)
-    if (osiComputed && ecapVal > 1.0) {
+    if ((osiComputed || osiEst) && ecapVal > 1.0) {
         ecapProgressFill.style.stroke = "var(--color-high-risk)";
         ecapAlertEl.classList.remove("hidden");
     } else {
