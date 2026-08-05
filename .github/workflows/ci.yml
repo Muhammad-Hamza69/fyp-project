@@ -47,6 +47,30 @@ jobs:
       - name: typecheck
         run: pnpm -r typecheck
 
+  dashboard:
+    name: dashboard smoke test (jsdom)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Loads index.html + app.js in a real DOM, renders every case and clicks
+      # every control.
+      #
+      # This job exists because a one-word typo — `patient` where the enclosing
+      # scope only had `activePatient` — threw a ReferenceError mid-render and
+      # took out the OSI, RRT and ECAP gauges, the PHASES card, the AI card and
+      # every click handler bound afterwards. 116 tests passed throughout,
+      # because all of them were Python or string greps: nothing executed the
+      # page. Gauges that never ran kept their previous markup, so the failure
+      # showed up as a confident "0.00" rather than an error.
+      - run: npm install --no-save jsdom
+      - name: smoke test
+        run: node tests/dashboard.smoke.mjs
+
   python:
     name: worker + API (Python)
     runs-on: ubuntu-latest

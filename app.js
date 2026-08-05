@@ -883,7 +883,15 @@ function updateRadialGauges() {
     // Printing "0.00" there asserts a measurement that was never made, and 0.00
     // is the most reassuring value on the scale. Cases without a cycle now show
     // no number at all.
-    const osiComputed = hemodynamicsAreTransient(patient);
+    // `activePatient`, not `patient`. This function takes no arguments and
+    // reads the module-level selection, as every gauge above it does. Passing
+    // an undeclared `patient` threw a ReferenceError right here, which killed
+    // the rest of the render: the OSI, RRT and ECAP gauges below, then
+    // renderPhasesScore() and renderMlPrediction() further up the call chain,
+    // and finally the click handlers bound after it. One typo took out half
+    // the dashboard, and every gauge past this line silently kept its last
+    // value — which read as "computed 0.00" rather than "never ran".
+    const osiComputed = hemodynamicsAreTransient(activePatient);
     const osiVal = domeZone.osi;
     osiGaugeValEl.textContent = osiComputed ? osiVal.toFixed(2) : "n/a";
     osiGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed);

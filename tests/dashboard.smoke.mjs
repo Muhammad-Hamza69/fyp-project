@@ -1,0 +1,204 @@
+/**
+ * Dashboard smoke test — loads index.html + app.js in a real DOM and drives it.
+ *
+ * WHY THIS EXISTS
+ * A one-word typo (`patient` where the function's scope only had
+ * `activePatient`) threw a ReferenceError partway through updateRadialGauges().
+ * Everything downstream died with it: the OSI, RRT and ECAP gauges, then
+ * renderPhasesScore() and renderMlPrediction() further along the call chain,
+ * and finally the click handlers bound after the first render — so Upload
+ * DICOM, 3D Nerve Model, OSI Instability and Expand Case Review all stopped
+ * responding.
+ *
+ * The suite had 116 tests at the time and not one of them noticed, because
+ * every single one was Python or a string grep over the source. Nothing ever
+ * EXECUTED the page. Gauges that never ran kept their previous markup, so the
+ * failure rendered as a confident "0.00" rather than an error — the worst
+ * possible presentation, and invisible to any test that does not run the code.
+ *
+ *   node tests/dashboard.smoke.mjs
+ */
+
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { JSDOM } from "jsdom";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+let failures = 0;
+const check = (name, cond, detail = "") => {
+    if (cond) {
+        console.log(`  PASS  ${name}`);
+    } else {
+        failures++;
+        console.log(`  FAIL  ${name}${detail ? `\n          ${detail}` : ""}`);
+    }
+};
+
+const html = readFileSync(resolve(ROOT, "index.html"), "utf8");
+const appJs = readFileSync(resolve(ROOT, "app.js"), "utf8");
+const patients = JSON.parse(readFileSync(resolve(ROOT, "real-cfd-patients.json"), "utf8"));
+
+const dom = new JSDOM(html, {
+    runScripts: "outside-only",
+    pretendToBeVisual: true,
+    url: "https://neuroflow-cfd.vercel.app/",
+});
+const { window } = dom;
+
+// Canvas is not implemented in jsdom; the heatmap only needs a 2D context that
+// accepts calls. Stubbing it keeps the test focused on logic rather than pixels.
+const ctxStub = new Proxy({}, {
+    get: (_t, prop) => {
+        if (prop === "canvas") return { width: 800, height: 600 };
+        if (prop === "createLinearGradient" || prop === "createRadialGradient") {
+            return () => ({ addColorStop() {} });
+        }
+        if (prop === "measureText") return () => ({ width: 10 });
+        if (prop === "getImageData") return () => ({ data: new Uint8ClampedArray(4) });
+        return () => {};
+    },
+    set: () => true,
+});
+window.HTMLCanvasElement.prototype.getContext = () => ctxStub;
+
+// Serve the computed cases the way the page fetches them.
+window.fetch = async (url) => ({
+    ok: true,
+    status: 200,
+    json: async () => (String(url).includes("real-cfd-patients") ? patients : {}),
+    text: async () => "",
+});
+
+// Record anything thrown asynchronously or logged as an error — a listener that
+// throws on click fails silently otherwise.
+// Exactly one message is tolerated, and only this one. neuro3d.js is an ES
+// module that imports three.js; jsdom runs scripts "outside-only" and has no
+// WebGL, so the viewer genuinely cannot load here. The page detects that and
+// logs this diagnostic instead of crashing — which is the behaviour under test,
+// not a fault. Everything else counts as a failure, because a blanket filter
+// would have hidden the very ReferenceError this file exists to catch.
+const EXPECTED = [/window\.NeuroViewer undefined: neuro3d\.js did not execute/];
+const errors = [];
+const record = (msg) => {
+    const s = String(msg);
+    if (!EXPECTED.some((re) => re.test(s))) errors.push(s);
+};
+window.addEventListener("error", (e) => record(e.error || e.message));
+window.console.error = (...a) => record(a.map(String).join(" "));
+
+// --- execute the page -------------------------------------------------------
+try {
+    window.eval(appJs);
+} catch (err) {
+    check("app.js evaluates without throwing", false, String(err && err.stack || err));
+    console.log(`\n${failures} failure(s)`);
+    process.exit(1);
+}
+check("app.js evaluates without throwing", true);
+
+// Initialisation runs here. A throw inside it (the original bug) would
+// otherwise propagate out and kill the process with a raw stack trace before
+// any result was printed — a correct non-zero exit, but an unreadable one.
+try {
+    window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
+    check("page initialises without throwing", true);
+} catch (err) {
+    check("page initialises without throwing", false, String(err && err.stack || err));
+    console.log(`\n${failures} failure(s) — initialisation threw, so nothing below ran`);
+    process.exit(1);
+}
+await new Promise((r) => setTimeout(r, 250));   // let the fetch settle
+
+const $ = (id) => window.document.getElementById(id);
+const txt = (id) => ($(id) ? ($(id).textContent || "").trim() : null);
+
+// --- the gauges that died ---------------------------------------------------
+//
+// Each of these sits AFTER the throw site, so each was left holding stale
+// markup. Asserting they are non-empty is what catches a repeat.
+for (const [id, label] of [
+    ["composite-risk-score", "Composite Risk Index"],
+    ["tawss-gauge-val", "TAWSS"],
+    ["osi-gauge-val", "OSI"],
+    ["rrt-gauge-val", "RRT"],
+    ["ecap-gauge-val", "ECAP"],
+    ["phases-total-points", "PHASES points"],
+]) {
+    const v = txt(id);
+    check(`${label} renders`, v !== null && v !== "" && v !== "-",
+          `#${id} = ${JSON.stringify(v)}`);
+}
+
+// RRT is computed from TAWSS and OSI and is defined on a steady solve, so
+// unlike OSI/ECAP it must be a real number for every case. It read 0.00 while
+// the bug was live, which is why it is checked explicitly.
+const rrt = parseFloat(txt("rrt-gauge-val"));
+check("RRT is a real value, not 0.00", Number.isFinite(rrt) && rrt > 0,
+      `rrt-gauge-val = ${txt("rrt-gauge-val")}`);
+
+// PHASES is rendered by a function called after the throw site.
+const phasesRows = $("phases-breakdown");
+check("PHASES breakdown is populated",
+      !!phasesRows && phasesRows.children.length > 0,
+      `#phases-breakdown children = ${phasesRows ? phasesRows.children.length : "n/a"}`);
+
+// --- the AI card ------------------------------------------------------------
+const mlCard = $("ml-card");
+const activeIsComputed = (txt("composite-risk-score") || "") !== "";
+if (mlCard && !mlCard.classList.contains("hidden")) {
+    check("AI probability renders", (txt("ml-probability") || "—") !== "—",
+          `ml-probability = ${txt("ml-probability")}`);
+    check("AI validity caveat is present",
+          ($("ml-validity")?.textContent || "").toLowerCase().includes("synthetic"));
+    check("AI SHAP bars render", ($("ml-shap")?.children.length || 0) > 0);
+} else {
+    check("AI card hidden only when the case has no prediction", activeIsComputed === false,
+          "ml-card is hidden on a case that should have a prediction");
+}
+
+// --- the buttons that stopped responding ------------------------------------
+//
+// Listeners are attached during initialisation. When the first render threw,
+// binding never completed and every one of these went dead. Clicking each and
+// asserting no error is what would have caught the report.
+const beforeClicks = errors.length;
+for (const [id, label] of [
+    ["view-3d-btn", "3D Nerve Model"],
+    ["toggle-osi-btn", "OSI Instability"],
+    ["toggle-tawss-btn", "TAWSS Distribution"],
+    ["view-2d-btn", "2D Heatmap"],
+    ["expand-case-btn", "Expand Case Review"],
+    ["sidebar-upload-box", "Upload DICOM / MRA"],
+]) {
+    const el = $(id);
+    if (!el) { check(`${label} exists`, false, `#${id} not found in index.html`); continue; }
+    try {
+        el.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+        check(`${label} click handled`, true);
+    } catch (err) {
+        check(`${label} click handled`, false, String(err));
+    }
+}
+check("no errors raised while clicking", errors.length === beforeClicks,
+      errors.slice(beforeClicks).join("\n          "));
+
+// --- switching cases must not throw -----------------------------------------
+const cards = window.document.querySelectorAll(".patient-card, [data-patient-id]");
+if (cards.length) {
+    const before = errors.length;
+    for (const card of cards) {
+        card.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    }
+    check("switching between every case raises no error",
+          errors.length === before, errors.slice(before).join("\n          "));
+    check("gauges still populated after switching",
+          (txt("rrt-gauge-val") || "") !== "" && (txt("phases-total-points") || "") !== "");
+}
+
+check("page produced no uncaught errors overall", errors.length === 0,
+      errors.join("\n          "));
+
+console.log(failures ? `\n${failures} failure(s)` : "\nall checks passed");
+process.exit(failures ? 1 : 0);
