@@ -604,10 +604,25 @@ function renderPatientList() {
         // cases do not. Labelling this in the UI is deliberate — the difference
         // between computed and authored data is the central claim of the
         // project and should not require reading the source to establish.
+        // THREE provenances, not two.
+        //
+        // An uploaded case used to fall through to the DEMO badge, which says
+        // "curated demonstration dataset". That is wrong in a way that matters:
+        // its geometry was measured from the user's own file and its
+        // hemodynamics came from a surrogate fitted to real OpenFOAM solutions.
+        // It is neither a solve nor an invention, and lumping it in with the
+        // curated cases misrepresents both.
         const isComputed = patient.provenance && patient.provenance.source === "computed";
-        const provenanceTag = isComputed
-            ? `<span class="provenance-badge" title="${patient.provenance.solver} — ${patient.provenance.convergence}"><i class="fa-solid fa-square-root-variable"></i> CFD</span>`
-            : `<span class="provenance-badge provenance-demo" title="Curated demonstration dataset — not computed"><i class="fa-solid fa-flask"></i> DEMO</span>`;
+        const isEstimated = !isComputed && patient.estimated === true;
+
+        let provenanceTag;
+        if (isComputed) {
+            provenanceTag = `<span class="provenance-badge" title="Solved with ${patient.provenance.solver} — ${patient.provenance.convergence}"><i class="fa-solid fa-square-root-variable"></i> CFD</span>`;
+        } else if (isEstimated) {
+            provenanceTag = `<span class="provenance-badge provenance-est" title="Geometry measured from the uploaded file; hemodynamics estimated by a surrogate fitted to full OpenFOAM solutions — not a solve"><i class="fa-solid fa-wave-square"></i> EST</span>`;
+        } else {
+            provenanceTag = `<span class="provenance-badge provenance-demo" title="Curated demonstration dataset — not computed and not measured"><i class="fa-solid fa-flask"></i> DEMO</span>`;
+        }
 
         card.innerHTML = `
             <div class="card-header">
@@ -1732,6 +1747,27 @@ function writeTerminalLog(text, type = "info") {
 }
 
 // Full Pipeline Runner
+/**
+ * A case identifier taken from the uploaded file's name.
+ *
+ * Used when the file itself carries no patient ID — an STL, a Fluent mesh, or a
+ * DICOM with the tag absent. The point is that the case stays traceable to the
+ * thing that produced it: upload "3D_aneurysm_AHMU1218001.stl" and the case is
+ * called "3D_aneurysm_AHMU1218001", not an identifier from somewhere else.
+ *
+ * Compound extensions (.nii.gz, .cas.gz) are stripped whole, since removing
+ * only ".gz" would leave a stray ".nii" in the displayed name.
+ */
+function caseIdFromFileName(fileName) {
+    let base = String(fileName || "").split(/[\/]/).pop() || "case";
+    base = base.replace(/\.(nii|cas|tar)\.gz$/i, "")
+               .replace(/\.(dcm|dicom|nii|stl|cas|msh|gz)$/i, "");
+    // Keep it readable but safe to use as a key and in the DOM.
+    base = base.replace(/[^\w.\- ]+/g, "_").replace(/_{2,}/g, "_").trim();
+    if (base.length > 40) base = base.slice(0, 40).trim();
+    return base || "Uploaded case";
+}
+
 async function runCfdSimulation(fileObject) {
     simulationModalEl.classList.remove("hidden");
     terminalLogOutput.innerHTML = "";
@@ -1846,7 +1882,30 @@ async function runCfdSimulation(fileObject) {
     }
 
     if (!patientId) {
-        patientId = "PT-2025-0061";
+        // Name the case after the FILE.
+        //
+        // This used to fall back to the literal "PT-2025-0061" whenever the
+        // filename did not happen to match /PT-\d{4}-\d{4}/. Upload
+        // "3D_aneurysm_AHMU1218001.stl" and it appeared as PT-2025-0061 — a
+        // hardcoded identity, unrelated to anything supplied, and one that
+        // would silently overwrite an existing case if that ID were already
+        // present. Losing the name the user gave the file also makes results
+        // impossible to trace back to their source.
+        patientId = caseIdFromFileName(fileName);
+        writeTerminalLog(
+            `[INFO] No patient identifier in the file; using the filename: ${patientId}`,
+            "info");
+    }
+
+    // Never silently replace an existing case. A second upload of a different
+    // scan that happens to share a name must not overwrite the first one's
+    // results.
+    if (patientDatabase[patientId] && !window.__reuploading) {
+        const base = patientId;
+        let k = 2;
+        while (patientDatabase[`${base} (${k})`]) k++;
+        patientId = `${base} (${k})`;
+        writeTerminalLog(`[INFO] '${base}' already exists; this case is '${patientId}'.`, "info");
     }
 
     // Store in global window variables for post-simulation updates
@@ -2196,7 +2255,10 @@ async function runCfdSimulation(fileObject) {
         simulationModalEl.classList.add("hidden");
     }
 
-    patientId = window.currentIngestedPatientId || "PT-2025-0061";
+    // Resolved earlier from the file or its name; there is no default to fall
+    // back to, because inventing an identity is what caused an upload to
+    // appear under an unrelated case ID.
+    patientId = window.currentIngestedPatientId || patientId;
     pathology = window.currentIngestedPathology || "Cerebral Vasculature";
 
     // Dynamically insert or update the patient profile in local state.
