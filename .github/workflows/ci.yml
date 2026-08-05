@@ -80,6 +80,15 @@ jobs:
       - name: smoke test
         run: node tests/dashboard.smoke.mjs
 
+      # Pushes a real file of every accepted type through the real readers and
+      # asserts that every displayed parameter moves with the geometry, that
+      # identical geometry in different containers agrees, and that what the
+      # file cannot supply is reported absent rather than defaulted. Two bugs
+      # got past code review and past the smoke test because neither compared
+      # two different files' outputs.
+      - name: upload format matrix
+        run: node tests/formats.matrix.mjs
+
   python:
     name: worker + API (Python)
     runs-on: ubuntu-latest

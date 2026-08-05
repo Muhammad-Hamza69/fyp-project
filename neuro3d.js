@@ -136,12 +136,28 @@ function showStaticFallback(patient, mode, reason) {
               onerror="this.style.display='none'">`;
 }
 
-/** Which anatomical anchor to use for this case. */
+/**
+ * Which anatomical anchor to use, and WHETHER IT CAME FROM THE FILE.
+ *
+ * The second half is the part that was missing. This used to fall through to
+ * `default_site` — MCA — whenever the case carried no site, and the panel then
+ * described the result as "positioned at its recorded site". Nothing was
+ * recorded. A DICOM header can carry the site in its clinical history tags and
+ * an annotated STL can carry it in the 80-byte header, but a plain surface or
+ * volume from any other tool carries no anatomical frame at all, so for those
+ * files the position is a placeholder — and it was being presented with the
+ * same authority as the measured dome diameter beside it.
+ *
+ * The position cannot be derived from a bare surface: locating a sac
+ * anatomically needs registration to an atlas, which needs an image in a known
+ * frame, which an STL is not. So the fix is not to compute it. It is to say so.
+ */
 function resolveSite(patient) {
     if (!assetMeta) return null;
     const raw = (patient?.demographics?.site || '').trim().toUpperCase();
     const key = assetMeta.site_aliases?.[raw] || raw;
-    return assetMeta.sites[key] ? key : assetMeta.default_site;
+    if (assetMeta.sites[key]) return { key, fromFile: true };
+    return { key: assetMeta.default_site, fromFile: false };
 }
 
 /**
@@ -164,7 +180,7 @@ function resolveSite(patient) {
 function buildSac(patient, mode) {
     if (!assetMeta || !scene) return;
 
-    const siteKey = resolveSite(patient);
+    const { key: siteKey, fromFile: siteFromFile } = resolveSite(patient);
     const site = assetMeta.sites[siteKey];
     const m = patient.morphology || {};
     const upm = assetMeta.units_per_mm;
@@ -225,19 +241,36 @@ function buildSac(patient, mode) {
             `${widthMm.toFixed(1)} mm dome × ${neckMm.toFixed(1)} mm neck, ` +
             `AR ${(m.aspectRatio || 1).toFixed(2)}, ${siteKey}`;
     }
+
+    // Size and shape are measured from the file. Position is only from the file
+    // when the file said where the aneurysm is — and most do not. Saying which
+    // costs one sentence and is the difference between a measurement and a
+    // placeholder that looks like one.
+    const siteEl = document.getElementById('neuro-3d-sac-site');
+    if (siteEl) {
+        siteEl.textContent = siteFromFile
+            ? `positioned at the ${siteKey} site recorded in the file`
+            : `drawn at a representative ${siteKey} location — this file records no `
+              + `aneurysm site, so the POSITION is illustrative while the size and `
+              + `shape are measured from it`;
+        siteEl.classList.toggle('is-placeholder', !siteFromFile);
+    }
     const modeEl = document.getElementById('neuro-3d-sac-mode');
     if (modeEl) modeEl.textContent = mode;
 
-    // Demonstration cases are drawn exactly like solved ones, so the panel has
-    // to say which it is looking at. Without this the view would present
-    // curated demo morphology with the same authority as a case that actually
-    // went through OpenFOAM — the sac is equally sharp either way.
+    // An estimated case is drawn exactly as sharply as a solved one, so the
+    // panel has to say which it is looking at. It used to read "curated
+    // demonstration values — not computed" for everything that was not a solve,
+    // which is now wrong in both directions: no case carries curated values any
+    // more, and an uploaded file's dome was measured from the user's own data
+    // even when its hemodynamics were estimated.
     const srcEl = document.getElementById('neuro-3d-sac-source');
     if (srcEl) {
         const computed = patient.provenance && patient.provenance.source === 'computed';
         srcEl.textContent = computed
             ? 'measured from the solved surface'
-            : 'curated demonstration values — not computed';
+            : 'geometry measured from the uploaded file, hemodynamics estimated by the '
+              + 'surrogate';
         srcEl.classList.toggle('is-demo', !computed);
     }
 }

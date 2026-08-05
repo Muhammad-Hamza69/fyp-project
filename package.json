@@ -6,7 +6,8 @@
   "scripts": {
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "test:dashboard": "node tests/dashboard.smoke.mjs"
+    "test:dashboard": "node tests/dashboard.smoke.mjs",
+    "test:formats": "node tests/formats.matrix.mjs"
   },
   "devDependencies": {
     "jsdom": "^25.0.0"

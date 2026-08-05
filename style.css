@@ -690,9 +690,19 @@ body {
     color: var(--text-primary);
 }
 
-/* Demonstration cases render an identically sharp sac, so the distinction has
+/* An estimated case renders an identically sharp sac, so the distinction has
    to carry visually as well as in the wording. */
 #neuro-3d-sac-source.is-demo {
+    color: var(--color-mod-risk, #B8860B);
+    font-weight: 600;
+}
+
+/* The sac's SIZE is measured from the uploaded file; its POSITION only is when
+   the file records an aneurysm site. A plain STL or NIfTI from another tool
+   carries no anatomical frame, so the sac is drawn at a representative
+   location — which looked exactly as authoritative as the measured dome beside
+   it until this said otherwise. */
+#neuro-3d-sac-site.is-placeholder {
     color: var(--color-mod-risk, #B8860B);
     font-weight: 600;
 }
