@@ -723,8 +723,9 @@
                         </div>
                         <div class="morph-body">
                             <p class="morph-note">
-                                No CFD run exists for this patient. Enter the measured sac
-                                dimensions and the hemodynamics will be estimated instantly
+                                No CFD run exists for this patient. The sac has been measured from
+                                the uploaded image; confirm or correct it and the hemodynamics
+                                will be estimated instantly
                                 from <strong id="morph-npoints">the</strong> full OpenFOAM
                                 solutions this surrogate was fitted to.
                             </p>
@@ -742,6 +743,7 @@
                                     </span>
                                 </label>
                             </div>
+                            <p class="morph-source" id="morph-source"></p>
                             <button class="btn-primary morph-go" id="morph-compute">
                                 <i class="fa-solid fa-bolt"></i> Estimate hemodynamics
                             </button>

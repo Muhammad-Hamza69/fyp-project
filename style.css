@@ -2366,3 +2366,11 @@ body {
     border-left: 3px solid var(--color-mod-risk, #B8860B);
     padding-left: 8px;
 }
+
+/* Says where the pre-filled measurements came from — the image, or nothing. */
+.morph-source {
+    margin: 0 0 10px;
+    font-size: 10.5px;
+    line-height: 1.45;
+    color: #94a3b8;
+}

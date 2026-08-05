@@ -185,6 +185,11 @@
             // megabytes; there is no reason to walk into it.
             if (group === 0x7FE0 && element === 0x0010) {
                 tags.pixelDataLength = length;
+                // Keep the offset so the pixels can be measured. Without this
+                // the only geometry available is whatever a user types, and the
+                // dome diameter — the quantity the hemodynamics actually turn
+                // on — is not in the header at all. It is in here.
+                tags.pixelDataOffset = offset;
                 break;
             }
 
@@ -233,5 +238,296 @@
         return { ok: true, tags, warnings, compressed: compressed || null };
     }
 
-    global.NeuroDicom = { parse, TAGS };
+    /**
+     * Read the pixel array as a Float64Array of raw stored values.
+     *
+     * Handles the uncompressed little-endian cases a scanner actually emits:
+     * 8- and 16-bit, signed or unsigned. Compressed transfer syntaxes are
+     * refused rather than reinterpreted as raw — decoding JPEG 2000 is not
+     * something this file pretends to do.
+     */
+    function pixels(buffer, tags) {
+        if (!tags || tags.pixelDataOffset == null) return null;
+        if (COMPRESSED[tags.transferSyntaxUID]) return null;
+
+        const rows = Number(tags.rows), cols = Number(tags.columns);
+        const bits = Number(tags.bitsAllocated) || 16;
+        if (!rows || !cols) return null;
+
+        const view = new DataView(buffer);
+        const n = rows * cols;
+        const signed = Number(tags.pixelRepresentation) === 1;
+        const out = new Float64Array(n);
+        const little = tags.transferSyntaxUID !== EXPLICIT_VR_BE;
+
+        for (let i = 0; i < n; i++) {
+            const o = tags.pixelDataOffset + i * (bits === 8 ? 1 : 2);
+            if (o + (bits === 8 ? 1 : 2) > view.byteLength) return null;
+            out[i] = bits === 8
+                ? (signed ? view.getInt8(o) : view.getUint8(o))
+                : (signed ? view.getInt16(o, little) : view.getUint16(o, little));
+        }
+        return { data: out, rows, cols };
+    }
+
+    /**
+     * Measure the aneurysm sac from the image, in millimetres.
+     *
+     * WHY THIS EXISTS
+     * Dome and neck diameter drive every hemodynamic estimate, and neither is
+     * in the DICOM header — they are properties of the pixels. Without this the
+     * user has to type them, and the results then describe what was typed
+     * rather than what was scanned.
+     *
+     * WHAT IT DOES
+     * TOF-MRA is a bright-vessel modality: flowing blood is high signal against
+     * suppressed background. So the lumen separates on intensity alone. The
+     * threshold is chosen by Otsu — computed from the histogram rather than
+     * hard-coded, so it adapts to each scan's own contrast. The largest
+     * connected bright region is taken as the vasculature, its width profiled
+     * column by column, and the sac identified as the widest bulge against the
+     * parent vessel's baseline calibre.
+     *
+     * WHAT IT IS NOT
+     * This is intensity thresholding, not clinical segmentation. It is sound on
+     * bright-vessel MRA of the kind these phantoms represent; on a real study
+     * with partial-volume effects, overlapping vessels or a thrombosed sac it
+     * would need the Frangi/Hessian vesselness path in imaging.py, which needs
+     * ITK and a server. Every measurement is returned with the assumptions it
+     * rests on, and the UI lets a clinician correct it.
+     */
+    function measureSac(buffer, tags) {
+        const px = pixels(buffer, tags);
+        if (!px) {
+            return { ok: false, reason: "pixel data unavailable or compressed" };
+        }
+        const { data, rows, cols } = px;
+
+        // Pixel spacing is [row, column] in mm. Without it a measurement in
+        // pixels cannot become millimetres, and guessing would be worse than
+        // declining.
+        let sy = null, sx = null;
+        if (typeof tags.pixelSpacing === "string" && tags.pixelSpacing.includes("\\")) {
+            const parts = tags.pixelSpacing.split("\\").map(parseFloat);
+            if (parts.length >= 2 && parts.every(Number.isFinite)) { sy = parts[0]; sx = parts[1]; }
+        }
+        if (!sy || !sx) return { ok: false, reason: "no PixelSpacing (0028,0030) in the header" };
+
+        // --- Otsu threshold ------------------------------------------------
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < data.length; i++) {
+            if (data[i] < lo) lo = data[i];
+            if (data[i] > hi) hi = data[i];
+        }
+        if (hi <= lo) return { ok: false, reason: "image has no intensity range" };
+
+        const BINS = 256;
+        const hist = new Float64Array(BINS);
+        const scale = (BINS - 1) / (hi - lo);
+        for (let i = 0; i < data.length; i++) hist[Math.round((data[i] - lo) * scale)]++;
+
+        const total = data.length;
+        let sum = 0;
+        for (let b = 0; b < BINS; b++) sum += b * hist[b];
+        let sumB = 0, wB = 0, best = -1, bestBin = 0;
+        for (let b = 0; b < BINS; b++) {
+            wB += hist[b];
+            if (wB === 0) continue;
+            const wF = total - wB;
+            if (wF === 0) break;
+            sumB += b * hist[b];
+            const mB = sumB / wB, mF = (sum - sumB) / wF;
+            const between = wB * wF * (mB - mF) * (mB - mF);
+            if (between > best) { best = between; bestBin = b; }
+        }
+        const thresh = lo + bestBin / scale;
+
+        // --- largest connected bright region (4-connected flood fill) -------
+        const mask = new Uint8Array(total);
+        for (let i = 0; i < total; i++) mask[i] = data[i] > thresh ? 1 : 0;
+
+        const label = new Int32Array(total).fill(-1);
+        let bestLabel = -1, bestCount = 0, next = 0;
+        const stack = new Int32Array(total);
+        for (let seed = 0; seed < total; seed++) {
+            if (!mask[seed] || label[seed] !== -1) continue;
+            let sp = 0, count = 0;
+            stack[sp++] = seed;
+            label[seed] = next;
+            while (sp > 0) {
+                const cur = stack[--sp];
+                count++;
+                const r = (cur / cols) | 0, c = cur % cols;
+                if (c > 0        && mask[cur - 1]    && label[cur - 1]    === -1) { label[cur - 1]    = next; stack[sp++] = cur - 1; }
+                if (c < cols - 1 && mask[cur + 1]    && label[cur + 1]    === -1) { label[cur + 1]    = next; stack[sp++] = cur + 1; }
+                if (r > 0        && mask[cur - cols] && label[cur - cols] === -1) { label[cur - cols] = next; stack[sp++] = cur - cols; }
+                if (r < rows - 1 && mask[cur + cols] && label[cur + cols] === -1) { label[cur + cols] = next; stack[sp++] = cur + cols; }
+            }
+            if (count > bestCount) { bestCount = count; bestLabel = next; }
+            next++;
+        }
+        if (bestLabel < 0 || bestCount < 20) {
+            return { ok: false, reason: "no vessel-like bright region found" };
+        }
+
+        // --- width profile along the vessel --------------------------------
+        // Column-wise extent of the region. The parent artery contributes a
+        // roughly constant width; the sac is where that width bulges.
+        const widthPx = new Float64Array(cols);
+        for (let c = 0; c < cols; c++) {
+            let top = -1, bot = -1;
+            for (let r = 0; r < rows; r++) {
+                if (label[r * cols + c] === bestLabel) { if (top < 0) top = r; bot = r; }
+            }
+            widthPx[c] = top < 0 ? 0 : (bot - top + 1);
+        }
+
+        const present = Array.from(widthPx).filter((w) => w > 0).sort((a, b) => a - b);
+        if (present.length < 5) return { ok: false, reason: "vessel too small to profile" };
+
+        // Baseline = median column width, which the parent artery dominates
+        // because it spans the whole field of view.
+        const baseline = present[Math.floor(present.length / 2)];
+        const parentMm = baseline * sy;
+
+        // The sac protrudes from the parent artery, so the TOTAL column extent
+        // is parent calibre PLUS protrusion — measuring that as the dome
+        // over-reports badly (9.0 mm against a true 5.38 mm on PT-2026-0103,
+        // +67%). The dome has to be measured on the sac ALONE.
+        //
+        // Find where the parent wall runs, then treat everything beyond it as
+        // sac and measure that region's own extent.
+        const topRow = new Int32Array(cols).fill(-1);
+        const botRow = new Int32Array(cols).fill(-1);
+        for (let c = 0; c < cols; c++) {
+            for (let r = 0; r < rows; r++) {
+                if (label[r * cols + c] === bestLabel) { if (topRow[c] < 0) topRow[c] = r; botRow[c] = r; }
+            }
+        }
+        // Parent wall position, taken from columns at baseline width — those
+        // are pure parent, uncontaminated by the sac.
+        const parentTops = [], parentBots = [];
+        for (let c = 0; c < cols; c++) {
+            if (widthPx[c] > 0 && Math.abs(widthPx[c] - baseline) <= 1) {
+                parentTops.push(topRow[c]); parentBots.push(botRow[c]);
+            }
+        }
+        if (parentTops.length < 3) return { ok: false, reason: "could not isolate the parent artery" };
+        parentTops.sort((a, b) => a - b); parentBots.sort((a, b) => a - b);
+        const pTop = parentTops[Math.floor(parentTops.length / 2)];
+        const pBot = parentBots[Math.floor(parentBots.length / 2)];
+
+        // Sac = the largest CONNECTED blob outside the parent band.
+        //
+        // Simply taking every pixel outside the band does not work: the parent
+        // wall is never perfectly straight, so its own rippling edges fall
+        // outside the median band in scattered columns across the whole image.
+        // The bounding box of that set spans the full field of view — it
+        // reported a 72.6 mm dome on a 36-row image. A second connected-
+        // component pass keeps only the contiguous bulge.
+        const outside = new Uint8Array(total);
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const i = r * cols + c;
+                if (label[i] === bestLabel && (r < pTop || r > pBot)) outside[i] = 1;
+            }
+        }
+        const seen = new Uint8Array(total);
+        let sacMinR = Infinity, sacMaxR = -Infinity, sacMinC = Infinity, sacMaxC = -Infinity, sacPx = 0;
+        for (let seed = 0; seed < total; seed++) {
+            if (!outside[seed] || seen[seed]) continue;
+            let sp = 0, count = 0;
+            let m0 = rows, m1 = -1, n0 = cols, n1 = -1;
+            stack[sp++] = seed; seen[seed] = 1;
+            while (sp > 0) {
+                const cur = stack[--sp];
+                count++;
+                const r = (cur / cols) | 0, c = cur % cols;
+                if (r < m0) m0 = r; if (r > m1) m1 = r;
+                if (c < n0) n0 = c; if (c > n1) n1 = c;
+                if (c > 0        && outside[cur - 1]    && !seen[cur - 1])    { seen[cur - 1] = 1;    stack[sp++] = cur - 1; }
+                if (c < cols - 1 && outside[cur + 1]    && !seen[cur + 1])    { seen[cur + 1] = 1;    stack[sp++] = cur + 1; }
+                if (r > 0        && outside[cur - cols] && !seen[cur - cols]) { seen[cur - cols] = 1; stack[sp++] = cur - cols; }
+                if (r < rows - 1 && outside[cur + cols] && !seen[cur + cols]) { seen[cur + cols] = 1; stack[sp++] = cur + cols; }
+            }
+            if (count > sacPx) {
+                sacPx = count;
+                sacMinR = m0; sacMaxR = m1; sacMinC = n0; sacMaxC = n1;
+            }
+        }
+
+        let domeMm, neckMm, bulge;
+        if (sacPx < 10) {
+            // No protrusion beyond the parent wall — a vessel without an
+            // aneurysm, or a slice that missed it.
+            domeMm = 0; neckMm = 0; bulge = 0;
+        } else {
+            // Dome = the sac's larger principal extent. Height captures a tall
+            // narrow sac; width captures a broad shallow one. Taking the max
+            // measures the maximum diameter, which is what the morphology and
+            // the PHASES size band are both defined on.
+            const sacH = (sacMaxR - sacMinR + 1) * sy;
+            const sacW = (sacMaxC - sacMinC + 1) * sx;
+            domeMm = Math.max(sacH, sacW);
+
+            // Neck = the NARROWEST width across the sac, which is the ostium.
+            //
+            // Taking the width at the parent wall gives the sphere's equator
+            // instead, because a sac seated shallowly is near its widest there
+            // — that read 11.4 mm against a true 8.22 mm. The waist is what the
+            // dome-to-neck ratio is defined on, so scan the sac's rows and take
+            // the minimum non-zero extent.
+            // Width of the sac on each of its rows.
+            const rowW = new Float64Array(rows).fill(0);
+            for (let r = sacMinR; r <= sacMaxR; r++) {
+                let nMin = Infinity, nMax = -Infinity;
+                for (let c = sacMinC; c <= sacMaxC; c++) {
+                    if (label[r * cols + c] === bestLabel) {
+                        if (c < nMin) nMin = c;
+                        if (c > nMax) nMax = c;
+                    }
+                }
+                if (Number.isFinite(nMin)) rowW[r] = (nMax - nMin + 1) * sx;
+            }
+
+            // Equator = widest row. Searching the WHOLE sac for its minimum
+            // finds the dome's tip, where the width tapers to nothing — that
+            // returned a 0.6 mm neck on a 5.4 mm sac. The ostium lies between
+            // the equator and the parent wall, so only that span is searched.
+            let eqRow = sacMinR, eqW = 0;
+            for (let r = sacMinR; r <= sacMaxR; r++) {
+                if (rowW[r] > eqW) { eqW = rowW[r]; eqRow = r; }
+            }
+            const junction = sacMinR < pTop ? pTop : pBot;
+            const from = Math.min(eqRow, junction), to = Math.max(eqRow, junction);
+
+            let narrow = Infinity;
+            for (let r = from; r <= to; r++) {
+                if (rowW[r] > 0 && rowW[r] < narrow) narrow = rowW[r];
+            }
+            neckMm = Number.isFinite(narrow) ? narrow : sacW;
+            // The ostium cannot exceed the dome it opens from.
+            neckMm = Math.min(neckMm, domeMm);
+            bulge = sacMaxR - sacMinR + 1;
+        }
+        return {
+            ok: true,
+            domeDiameterMm: +domeMm.toFixed(2),
+            neckDiameterMm: +neckMm.toFixed(2),
+            parentDiameterMm: +parentMm.toFixed(2),
+            aspectRatio: +(domeMm / Math.max(neckMm, 0.1)).toFixed(2),
+            thresholdUsed: thresh,
+            regionPixels: bestCount,
+            pixelSpacingMm: [sy, sx],
+            // A profile with no bulge is a vessel without an aneurysm, or a
+            // slice that missed it. Saying so beats reporting the parent
+            // artery's width as a dome.
+            bulgeDetected: bulge > 0 && domeMm > 0,
+            method: "Otsu threshold + largest connected component + width profile",
+            caveat: "Intensity thresholding on a bright-vessel MRA, not clinical "
+                  + "segmentation. Confirm the measurement before relying on it.",
+        };
+    }
+
+    global.NeuroDicom = { parse, pixels, measureSac, TAGS };
 })(typeof window !== "undefined" ? window : globalThis);
