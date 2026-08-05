@@ -27,7 +27,7 @@
  *     node tests/formats.matrix.mjs
  */
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
@@ -101,11 +101,23 @@ async function analyse(name, bytes) {
     if (!r.ok) return { ok: false, reason: r.reason };
 
     const m = r.measurement;
-    const h = window.NeuroSurrogate.predict({
-        maxDiameterMm: m.domeDiameterMm,
-        neckDiameterMm: m.neckDiameterMm,
-        aspectRatio: m.aspectRatio,
-    });
+    // A reader can succeed at parsing and still fail to MEASURE — an open
+    // surface, or one tessellated too coarsely to close a voxel shell, yields
+    // no dome. predict() then throws, and an uncaught throw here kills the
+    // whole suite on the first bad fixture instead of reporting one failure.
+    if (!(m && m.domeDiameterMm > 0)) {
+        return { ok: false, reason: m && m.reason ? m.reason : "no dome measured" };
+    }
+    let h;
+    try {
+        h = window.NeuroSurrogate.predict({
+            maxDiameterMm: m.domeDiameterMm,
+            neckDiameterMm: m.neckDiameterMm,
+            aspectRatio: m.aspectRatio,
+        });
+    } catch (err) {
+        return { ok: false, reason: `surrogate rejected the measurement: ${err.message}` };
+    }
     const c = composite(m.domeDiameterMm, m.aspectRatio || 1, h.sacTawss, h.osi);
     return {
         ok: true, measurement: m, clinical: r.clinical || {}, hemo: h,
@@ -266,7 +278,16 @@ for (const group of [
 console.log("\nabsent data is reported absent, not defaulted");
 {
     // Blank the 80-byte STL header — a plain surface from any other tool.
-    const annotated = readFileSync(resolve(UPLOADS, "PT-2026-0401_SURFACE.stl"));
+    const stlPath = resolve(UPLOADS, "PT-2026-0401_SURFACE.stl");
+    if (!existsSync(stlPath)) {
+        check("the STL fixture is present in the repository", false,
+              `${stlPath} is missing — it was excluded by the *.stl rule in `
+              + `.gitignore, so CI had no file to read`);
+        console.log(`
+${failures} failure(s)`);
+        process.exit(1);
+    }
+    const annotated = readFileSync(stlPath);
     const plain = Buffer.from(annotated);
     plain.fill(0, 0, 80);
 

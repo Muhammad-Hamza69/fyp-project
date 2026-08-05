@@ -1044,6 +1044,19 @@ body {
 }
 
 /* UI Buttons & Generic Styling */
+/* The header's action buttons, side by side.
+
+   .header-actions had no rule at all. It was therefore a block container, and
+   .btn below is `display: flex` — which is BLOCK-level, so each button took a
+   full line and the two stacked vertically. It only became visible when a
+   second button was added; with one button there was nothing to stack against. */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
 .btn {
     border: none;
     font-family: inherit;
@@ -1052,10 +1065,20 @@ body {
     padding: 8px 16px;
     border-radius: 6px;
     cursor: pointer;
-    display: flex;
+    /* inline-flex, not flex: these sit beside each other in a row, and a
+       block-level box in a flex parent still forces its own line in some
+       fallback layouts. */
+    display: inline-flex;
     align-items: center;
     gap: 8px;
+    white-space: nowrap;
     transition: all var(--transition-speed);
+}
+
+/* One of the two is an <a>, which arrives underlined and in the UA link colour.
+   A button that is a link should still look like the button next to it. */
+a.btn {
+    text-decoration: none;
 }
 
 .btn-primary {

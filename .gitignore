@@ -35,6 +35,13 @@ cases/
 *.nii
 *.nii.gz
 
+# ...but the upload-format fixtures ARE the test data, and excluding them meant
+# CI could not run tests/formats.matrix.mjs at all: three of the eight files
+# were missing on the runner, so the suite crashed on ENOENT while passing here.
+# The rules above exist for CFD output, which is regenerable; these are not.
+!test-uploads/
+!test-uploads/**
+
 # --- vm / archive images ---
 *.vhdx
 *.tar

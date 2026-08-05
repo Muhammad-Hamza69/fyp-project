@@ -1,0 +1,11 @@
+# Upload-format fixtures: byte-for-byte, never line-ending converted.
+#
+# PT-2026-0401_SURFACE.stl is a BINARY STL — 80-byte header, then 50 bytes per
+# triangle. A CRLF conversion would rewrite every 0x0A inside float data and
+# corrupt the geometry silently, and the file would still open.
+#
+# The .cas is text, but it is checked byte-for-byte against its own .gz twin by
+# tests/formats.matrix.mjs, and gzip does not get converted. Letting git rewrite
+# one of the pair and not the other is how "the same aneurysm measures the same
+# in every container" would start failing for no reason anyone could see.
+test-uploads/** -text -diff
