@@ -18,6 +18,11 @@ package.json
 # documents
 docs
 *.dcm
+# ...but the three sample scans MUST ship. They are what the Upload DICOM / MRA
+# control is demonstrated with, and each is genuine DICOM (~14 KB) matching a
+# case that has a completed CFD run, so uploading one shows real computed
+# hemodynamics rather than a placeholder.
+!samples/*.dcm
 *.pdf
 *.docx
 *.md
