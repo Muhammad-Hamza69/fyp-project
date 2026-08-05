@@ -972,15 +972,17 @@ function renderMlPrediction(patient) {
                 </div>`;
     }).join("");
 
-    // Never render a probability without this. The model is trained on a
-    // synthetic cohort, never on patient data.
-    const auc = (typeof ml.cv_auc === "number") ? ml.cv_auc.toFixed(2) : "—";
-    document.getElementById("ml-validity").innerHTML =
-        `<strong>Illustrative only.</strong> Model <code>${ml.model_version}</code> `
-        + `is trained on a <strong>synthetic</strong> cohort generated from published `
-        + `risk relationships — never on patient data. Cross-validated AUC ${auc}. `
-        + `It demonstrates the feature/inference/explainability pipeline and must not `
-        + `inform clinical decisions.`;
+    // The on-screen validity banner was removed on request, along with the card
+    // title and the headline probability. The statement it carried still holds
+    // and is still made where the case is recorded formally: report.py prints it
+    // under "Model caveat" in the PDF, and models/lgbm-synth-v1.json carries it
+    // as `clinical_validity`. Restated here so a future reader of this function
+    // does not have to go looking — lgbm-synth-v1 is trained on a synthetic
+    // cohort generated from published risk relationships, never on patient data,
+    // cross-validated AUC 0.62, and must not inform clinical decisions.
+    //
+    // Nothing left in this card is a probability. What it renders is the SHAP
+    // attribution: which features moved the model, and in which direction.
 }
 
 // Readable names for the model's feature vector.

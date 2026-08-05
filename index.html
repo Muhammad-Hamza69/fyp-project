@@ -358,35 +358,35 @@
                             <span id="phases-points-max" class="phases-points-max"></span>
                         </div>
                         <div class="phases-breakdown" id="phases-breakdown"></div>
-                        <p class="phases-card-note">Demographic &amp; morphological score (Greving et al., PHASES) &mdash;
-                            used alongside, not instead of, the hemodynamic Composite Risk Index above.</p>
                     </div>
 
                     <!--
-                        Machine-learning rupture prediction. A third, independent
-                        estimate alongside the hemodynamic Composite Risk Index and
-                        the PHASES clinical score — deliberately not merged with
-                        them, so a reader can see where the three agree and where
-                        they do not.
+                        Machine-learning rupture prediction. A third estimate
+                        beside the hemodynamic Composite Risk Index and the PHASES
+                        clinical score, deliberately not merged with them so a
+                        reader can see where they agree and where they do not.
 
-                        The validity banner is not boilerplate: this model is
-                        trained on a SYNTHETIC cohort generated from published risk
-                        relationships, never on patient data. It demonstrates the
-                        feature -> inference -> explainability pipeline. Presenting
-                        a probability without that context would be the single most
-                        misleading thing on this page.
+                        The headline probability, the risk category, the
+                        confidence, the card title and the validity banner have
+                        all been removed from this panel on request. What remains
+                        is the SHAP attribution: which features moved the model,
+                        and in which direction.
+
+                        The caveat those removals took off the screen is not gone
+                        from the project. The PDF report still prints it
+                        (report.py, "Model caveat") and the model artifact itself
+                        records it. It matters, and is recorded here so it is not
+                        lost: lgbm-synth-v1 is trained on a SYNTHETIC cohort
+                        generated from published risk relationships, never on
+                        patient data, with a cross-validated AUC of 0.62.
                     -->
                     <div class="card metric-card ml-card" id="ml-card">
-                        <h3 class="card-title">AI Rupture Prediction</h3>
-
                         <!-- Warns when the model ran on an incomplete feature
                              vector (OSI absent on a steady solve). -->
                         <div id="ml-incomplete" class="ml-incomplete hidden"></div>
 
                         <div class="ml-shap-title">Top contributing features (SHAP)</div>
                         <div class="ml-shap" id="ml-shap"></div>
-
-                        <p class="ml-validity" id="ml-validity"></p>
                     </div>
             </section>
         </div>

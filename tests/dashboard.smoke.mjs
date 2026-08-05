@@ -208,13 +208,14 @@ check("PHASES breakdown is populated",
 const mlCard = $("ml-card");
 const activeIsComputed = (txt("composite-risk-score") || "") !== "";
 if (mlCard && !mlCard.classList.contains("hidden")) {
-    // The headline probability / category / confidence were removed. What the
-    // card keeps is the part that carries information: which features moved the
-    // model, and what the model is. A single percentage from a synthetic-cohort
-    // model with a 0.62 AUC is the piece most likely to be read as a finding.
-    check("AI validity caveat is present",
-          ($("ml-validity")?.textContent || "").toLowerCase().includes("synthetic"));
+    // Stripped on request to the attribution alone — no probability, no risk
+    // category, no confidence, no title, no validity banner. The caveat is now
+    // asserted where it still lives (the model artifact and the PDF report) by
+    // test_ml_wiring.py, not here, because it is no longer on the page.
     check("AI SHAP bars render", ($("ml-shap")?.children.length || 0) > 0);
+    for (const gone of ["ml-validity", "ml-probability"]) {
+        check(`#${gone} is gone`, $(gone) === null);
+    }
 } else {
     check("AI card hidden only when the case has no prediction", activeIsComputed === false,
           "ml-card is hidden on a case that should have a prediction");

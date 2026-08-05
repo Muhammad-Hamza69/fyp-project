@@ -183,27 +183,40 @@ def test_finalize_attaches_prediction_before_writing_json():
     )
 
 
-def test_dashboard_renders_the_validity_caveat():
+def test_the_validity_caveat_survives_somewhere_authoritative():
     """
-    A probability shown without its provenance is the most misleading element
-    on the page. The card must always carry the synthetic-training caveat.
+    The dashboard's ML panel has been stripped, on request, to the SHAP
+    attribution alone: the probability, risk category, confidence, card title
+    and on-screen validity banner are all gone.
 
-    The headline probability, risk category and confidence were removed from the
-    card at the user's request; the SHAP attribution and the caveat stayed. That
-    resolves the concern this test guards in the strongest available way — the
-    number that could be misread is no longer displayed at all — but the caveat
-    still has to be there, because the feature attribution is just as much a
-    claim about a model trained on a synthetic cohort.
+    This test used to assert the banner was on screen. It cannot any more, so it
+    asserts the thing that actually matters instead — that the statement is
+    still MADE somewhere authoritative rather than having quietly evaporated
+    along with the element that displayed it. Two places, both of which travel
+    with the result:
+
+      - the model artifact itself carries `clinical_validity`
+      - the PDF report prints it under "Model caveat"
+
+    If a future change drops either, this fails, and the project would then be
+    shipping SHAP attributions from a synthetic-cohort model with a 0.62 AUC
+    with no statement anywhere of what the model is.
     """
+    meta = json.loads((MODEL_DIR / f"{risk_model.MODEL_VERSION}.json").read_text())
+    validity = meta.get("clinical_validity", "")
+    assert "not trained or validated on patient data" in validity.lower()
+    assert meta.get("training_data", "").upper().startswith("SYNTHETIC")
+
+    report = (REPO / "services/worker/pipeline/report.py").read_text(encoding="utf-8")
+    assert "Model caveat" in report, "the PDF is the last place this is stated"
+    assert "clinical_validity" in report
+
+    # And the stripped elements must stay stripped: re-adding markup without the
+    # renderer, or the reverse, puts a dash or a stale value back on screen.
     app = (REPO / "app.js").read_text(encoding="utf-8")
     html = (REPO / "index.html").read_text(encoding="utf-8")
     assert "renderMlPrediction" in app
-    assert "ml-validity" in app
-    assert "synthetic" in app.lower()
-    assert "ml-shap" in app, "the attribution is what the card is now for"
-
-    # And the headline numbers must stay gone: re-adding the markup without the
-    # renderer, or vice versa, would put a dash or a stale value back on screen.
-    for gone in ("ml-probability", "ml-category", "ml-confidence"):
+    assert "ml-shap" in app, "the attribution is what the panel is now for"
+    for gone in ("ml-probability", "ml-category", "ml-confidence", "ml-validity"):
         assert gone not in html, f"{gone} was removed from the interface"
         assert gone not in app, f"{gone} was removed from the interface"

@@ -582,17 +582,6 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-.ml-validity {
-    margin-top: 9px;
-    font-size: 9.5px;
-    line-height: 1.45;
-    color: var(--text-secondary);
-}
-
-.ml-validity code {
-    font-size: 9px;
-}
-
 /* A quantity that was never computed, shown as "n/a". Deliberately muted: it
    must not read as a value on the scale, and 0.00 (which this replaces) is the
    most reassuring value the OSI and ECAP scales have. */
@@ -931,13 +920,6 @@ body {
     color: var(--text-primary);
 }
 
-.phases-card-note {
-    font-size: 9.5px;
-    color: #94a3b8;
-    line-height: 1.4;
-    font-style: italic;
-    margin: 0;
-}
 
 .phases-report-note {
     font-size: 11px;
