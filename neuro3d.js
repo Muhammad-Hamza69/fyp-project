@@ -136,6 +136,9 @@ function showStaticFallback(patient, mode, reason) {
               onerror="this.style.display='none'">`;
 }
 
+/** What the currently-drawn sac was built from; read by the case report. */
+let lastSacInfo = null;
+
 /**
  * Which anatomical anchor to use, and WHETHER IT CAME FROM THE FILE.
  *
@@ -232,47 +235,21 @@ function buildSac(patient, mode) {
     // differently depending on how tall its dome is.
     focusOn(sacMesh.position.clone(), OUT);
 
-    // Publish the numbers the sac was built from. Stating them beside the
-    // render is what lets a viewer check the picture against the data rather
-    // than take the shape on trust.
-    const dims = document.getElementById('neuro-3d-sac-dims');
-    if (dims) {
-        dims.textContent =
-            `${widthMm.toFixed(1)} mm dome × ${neckMm.toFixed(1)} mm neck, ` +
-            `AR ${(m.aspectRatio || 1).toFixed(2)}, ${siteKey}`;
-    }
-
-    // Size and shape are measured from the file. Position is only from the file
-    // when the file said where the aneurysm is — and most do not. Saying which
-    // costs one sentence and is the difference between a measurement and a
-    // placeholder that looks like one.
-    const siteEl = document.getElementById('neuro-3d-sac-site');
-    if (siteEl) {
-        siteEl.textContent = siteFromFile
-            ? `positioned at the ${siteKey} site recorded in the file`
-            : `drawn at a representative ${siteKey} location — this file records no `
-              + `aneurysm site, so the POSITION is illustrative while the size and `
-              + `shape are measured from it`;
-        siteEl.classList.toggle('is-placeholder', !siteFromFile);
-    }
-    const modeEl = document.getElementById('neuro-3d-sac-mode');
-    if (modeEl) modeEl.textContent = mode;
-
-    // An estimated case is drawn exactly as sharply as a solved one, so the
-    // panel has to say which it is looking at. It used to read "curated
-    // demonstration values — not computed" for everything that was not a solve,
-    // which is now wrong in both directions: no case carries curated values any
-    // more, and an uploaded file's dome was measured from the user's own data
-    // even when its hemodynamics were estimated.
-    const srcEl = document.getElementById('neuro-3d-sac-source');
-    if (srcEl) {
-        const computed = patient.provenance && patient.provenance.source === 'computed';
-        srcEl.textContent = computed
-            ? 'measured from the solved surface'
-            : 'geometry measured from the uploaded file, hemodynamics estimated by the '
-              + 'surrogate';
-        srcEl.classList.toggle('is-demo', !computed);
-    }
+    // The provenance panel that used to sit under this view was removed from
+    // the interface. `siteFromFile` is still resolved and still matters: the
+    // sac's SIZE and SHAPE are measured from the uploaded file, but its
+    // POSITION is only from the file when the file records an aneurysm site,
+    // which a bare STL or NIfTI never does. Kept queryable so the case report
+    // can state it, rather than dropped along with the panel that showed it.
+    lastSacInfo = {
+        domeMm: widthMm,
+        neckMm,
+        aspectRatio: m.aspectRatio || 1,
+        site: siteKey,
+        siteFromFile,
+        mode,
+        computed: !!(patient.provenance && patient.provenance.source === 'computed'),
+    };
 }
 
 function disposeSac() {
@@ -438,4 +415,4 @@ function applyRiskColors(patient, mode) {
     });
 }
 
-window.NeuroViewer = { init, applyRiskColors };
+window.NeuroViewer = { init, applyRiskColors, sacInfo: () => lastSacInfo };

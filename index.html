@@ -114,27 +114,7 @@
                             <i class="fa-solid fa-cube"></i> 3D Nerve Model
                         </button>
                     </div>
-                    <!-- These two do not change the case or the numbers. They change
-                         WHICH quantity the colours represent, in both the 2D map and
-                         the 3D sac. Two different failure modes, two different
-                         pictures of the same solve. -->
-                    <div class="toggle-control-group" role="group" aria-label="Colour the map by">
-                        <span class="toggle-group-label">Colour by</span>
-                        <button id="toggle-tawss-btn" class="toggle-btn active" data-map="TAWSS"
-                                title="Colour by wall shear stress — how hard blood drags along the vessel wall. Low values (below 0.4 Pa) mark stagnant regions where the wall is starved of flow.">
-                            TAWSS <span class="toggle-btn-sub">shear stress</span>
-                        </button>
-                        <button id="toggle-osi-btn" class="toggle-btn" data-map="OSI"
-                                title="Colour by oscillatory shear index — how much the flow direction reverses during a heartbeat. High values mark disturbed, swirling regions.">
-                            OSI <span class="toggle-btn-sub">flow reversal</span>
-                        </button>
-                    </div>
                 </div>
-
-                <!-- Says what the colours currently mean. Without it the two
-                     toggles produce two differently-coloured pictures of the same
-                     case and nothing on screen explains why they differ. -->
-                <p id="map-mode-caption" class="map-mode-caption"></p>
 
                 <div class="canvas-container">
                     <!-- 2D Heatmap View -->
@@ -181,25 +161,6 @@
 
                         <div class="canvas-overlay-hints">
                             <span><i class="fa-solid fa-arrows-rotate"></i> Drag to rotate &middot; scroll to zoom</span>
-                        </div>
-
-                        <!--
-                            States plainly which part of this view is data and which is
-                            context. The vessel network is a generic anatomical asset and
-                            is identical for every patient; only the sac carries measured
-                            values. Without this, a viewer reasonably assumes the whole
-                            picture is patient-specific, which would be a misreading the
-                            page had invited.
-                        -->
-                        <div class="neuro-3d-provenance">
-                            <i class="fa-solid fa-circle-info"></i>
-                            Vessel network is a <strong>generic anatomical model</strong> shown for
-                            orientation. The <strong>sac</strong> is this case:
-                            <span id="neuro-3d-sac-site">positioned at its recorded site</span>,
-                            sized at true scale
-                            (<span id="neuro-3d-sac-dims">&mdash;</span>), coloured by
-                            <span id="neuro-3d-sac-mode">TAWSS</span> &mdash;
-                            <span id="neuro-3d-sac-source">&mdash;</span>.
                         </div>
 
                         <div class="neuro-3d-legend">
@@ -392,7 +353,6 @@
                                  same number is repeated as a natural frequency. -->
                             <span id="phases-risk-natural" class="phases-natural"></span>
                         </div>
-                        <div id="phases-band" class="phases-band"></div>
                         <div class="phases-points-line">
                             PHASES score <span id="phases-total-points" class="phases-points">&mdash;</span>
                             <span id="phases-points-max" class="phases-points-max"></span>
@@ -418,19 +378,6 @@
                     -->
                     <div class="card metric-card ml-card" id="ml-card">
                         <h3 class="card-title">AI Rupture Prediction</h3>
-
-                        <div class="ml-score-row">
-                            <div class="ml-prob-wrap">
-                                <span id="ml-probability" class="ml-prob">&mdash;</span>
-                                <span class="ml-prob-label">Rupture probability</span>
-                            </div>
-                            <div class="ml-conf-wrap">
-                                <span id="ml-category" class="ml-category">&mdash;</span>
-                                <span class="ml-conf-label">
-                                    confidence <span id="ml-confidence">&mdash;</span>
-                                </span>
-                            </div>
-                        </div>
 
                         <!-- Warns when the model ran on an incomplete feature
                              vector (OSI absent on a steady solve). -->

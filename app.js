@@ -385,36 +385,6 @@ const PHASES_MAX_POINTS =
     + 4      // Earlier SAH: yes
     + 4;     // Site: ACOM / PCOM / posterior circulation
 
-/**
- * Plain-language reading of a 5-year rupture risk.
- *
- * Bands follow how the PHASES authors and subsequent guidance discuss the
- * score: under ~1% over five years is the range in which conservative
- * management is usual, and above ~5% is where intervention is typically
- * weighed. They are a reading aid for the number, not a treatment
- * recommendation, and the card says so.
- */
-function phasesBand(percent) {
-    if (percent < 1.0) {
-        return { label: "Low", cls: "phases-band-low",
-                 text: "In the range where imaging follow-up is usually preferred "
-                     + "over intervention." };
-    }
-    if (percent < 3.0) {
-        return { label: "Moderate", cls: "phases-band-moderate",
-                 text: "Usually managed with surveillance, weighing patient age "
-                     + "and preference." };
-    }
-    if (percent < 7.0) {
-        return { label: "High", cls: "phases-band-high",
-                 text: "In the range where treatment is commonly discussed "
-                     + "against the risks of the procedure itself." };
-    }
-    return { label: "Very high", cls: "phases-band-high",
-             text: "Well above the range where intervention is normally "
-                 + "considered." };
-}
-
 /** "about 5 in 100 people" — small percentages are widely misread. */
 function naturalFrequency(percent) {
     if (percent >= 10) return `roughly ${Math.round(percent)} in every 100 people with this profile`;
@@ -466,48 +436,19 @@ function computePhasesScore(patient) {
 
 // Global App State
 let activePatient = patientDatabase["PT-2025-0041"];
-let currentMapMode = "TAWSS"; // TAWSS or OSI
+// The TAWSS / OSI colour toggle was removed from the interface, so the maps and
+// the 3D sac are always coloured by TAWSS. The OSI branches in getInterpolatedColor
+// and NeuroViewer.applyRiskColors are left intact and reachable by setting this —
+// removing them would delete working, tested code to no purpose, and OSI is still
+// shown as a gauge, in the heatmap tooltip and in the report.
+let currentMapMode = "TAWSS";
 
-/**
- * What each colour mode is showing.
- *
- * The two toggles change WHICH hemodynamic quantity is painted onto the vessel,
- * in both the 2D map and the 3D sac. They do not change the case, and they do
- * not change any of the numbers in the telemetry panel. Nothing on screen said
- * that, so two differently-coloured pictures of the same solve appeared with no
- * explanation of what had changed between them.
- *
- * They are shown separately rather than combined because they capture different
- * failure modes and an aneurysm can have either without the other: low shear is
- * about flow being too WEAK, oscillation is about it being too DISORDERED.
- */
-const MAP_MODE_CAPTIONS = {
-    TAWSS: "<strong>TAWSS — time-averaged wall shear stress.</strong> "
-         + "How hard blood drags along the vessel wall, averaged over a heartbeat. "
-         + "<span class=\"map-caption-red\">Red = low shear</span>, where flow is "
-         + "sluggish and the wall is starved — below 0.4 Pa is associated with wall "
-         + "degeneration. <span class=\"map-caption-blue\">Blue = healthy shear</span>, "
-         + "as in the parent artery.",
-    OSI: "<strong>OSI — oscillatory shear index.</strong> "
-       + "How much the flow reverses direction during a heartbeat, 0 (always one way) "
-       + "to 0.5 (fully reversing). <span class=\"map-caption-red\">Red = disturbed, "
-       + "swirling flow</span>; <span class=\"map-caption-blue\">blue = smooth, "
-       + "unidirectional flow</span>. Independent of TAWSS above: a sac can be "
-       + "stagnant without swirling, or swirling without being stagnant.",
-};
-
-function renderMapModeCaption() {
-    const el = document.getElementById("map-mode-caption");
-    if (el) el.innerHTML = MAP_MODE_CAPTIONS[currentMapMode] || "";
-}
 let hoverZone = null;
 
 // DOM Elements - Dashboard View
 const activePatientIdEl = document.getElementById("active-patient-id");
 const activePatientStatusEl = document.getElementById("active-patient-status");
 const patientListContainer = document.getElementById("patient-list-container");
-const toggleTawssBtn = document.getElementById("toggle-tawss-btn");
-const toggleOsiBtn = document.getElementById("toggle-osi-btn");
 const mainCanvas = document.getElementById("heatmap-canvas");
 const mainCtx = mainCanvas.getContext("2d");
 
@@ -562,7 +503,6 @@ const breakdownAspectPctEl = document.getElementById("breakdown-aspect-pct");
 const phasesTotalPointsEl = document.getElementById("phases-total-points");
 const phasesRiskPercentEl = document.getElementById("phases-risk-percent");
 const phasesRiskNaturalEl = document.getElementById("phases-risk-natural");
-const phasesBandEl = document.getElementById("phases-band");
 const phasesPointsMaxEl = document.getElementById("phases-points-max");
 const phasesBreakdownEl = document.getElementById("phases-breakdown");
 
@@ -784,8 +724,6 @@ async function initApp() {
     // must not be drawn with their authored numbers even once.
     const nDerived = deriveCuratedHemodynamics();
 
-    renderMapModeCaption();
-
     // Test seam. The smoke suite has to assert that no case is still carrying
     // authored hemodynamics, and there is no way to see that from the DOM — the
     // gauges render a number either way. Without this the assertion passes
@@ -942,7 +880,6 @@ function renderPhasesScore(patient) {
         phasesRiskPercentEl.classList.add("gauge-not-computed");
         if (phasesRiskNaturalEl) phasesRiskNaturalEl.textContent = "";
         if (phasesPointsMaxEl) phasesPointsMaxEl.textContent = "";
-        if (phasesBandEl) { phasesBandEl.textContent = ""; phasesBandEl.className = "phases-band"; }
         phasesBreakdownEl.innerHTML =
             `<div class="phases-missing">
                <i class="fa-solid fa-circle-info"></i>
@@ -960,13 +897,6 @@ function renderPhasesScore(patient) {
     phasesRiskPercentEl.textContent = `${riskPercent.toFixed(1)}%`;
     phasesRiskPercentEl.classList.remove("gauge-not-computed");
     if (phasesRiskNaturalEl) phasesRiskNaturalEl.textContent = naturalFrequency(riskPercent);
-
-    const band = phasesBand(riskPercent);
-    if (phasesBandEl) {
-        phasesBandEl.className = `phases-band ${band.cls}`;
-        phasesBandEl.innerHTML =
-            `<strong>${band.label}</strong> — ${band.text}`;
-    }
 
     // Points demoted to the working, with the maximum shown so the figure has
     // a scale. Note the score is NOT linear in risk: 1 point is 0.4% and 12 is
@@ -1003,20 +933,14 @@ function renderMlPrediction(patient) {
     if (!ml) { card.classList.add("hidden"); return; }
     card.classList.remove("hidden");
 
-    const pct = (ml.probability * 100).toFixed(1);
-    document.getElementById("ml-probability").textContent = `${pct}%`;
-
-    const catEl = document.getElementById("ml-category");
-    catEl.textContent = ml.risk_category || "—";
-    catEl.className = "ml-category " + ({
-        High: "tier-high", Moderate: "tier-mod", Low: "tier-low",
-    }[ml.risk_category] || "");
-
-    // Confidence is distance from the decision boundary, not the probability.
-    // A 0.545 output is maximally UNCERTAIN, not "moderately confident" —
-    // showing the probability alone would invite exactly that misreading.
-    document.getElementById("ml-confidence").textContent =
-        `${(ml.confidence * 100).toFixed(0)}%`;
+    // The headline probability, risk category and confidence are no longer
+    // displayed. `ml.probability` and `ml.confidence` are still computed and
+    // still stored on the case — the report and the API carry them — but the
+    // card now shows only WHICH FEATURES drove the model and the caveat about
+    // what the model is. Given lgbm-synth-v1 is trained on a synthetic cohort
+    // with a cross-validated AUC of 0.62, the feature attribution is the part
+    // that carries information; a single percentage from a near-chance model is
+    // the part most likely to be read as a finding.
 
     // The model takes OSI as an input. On a steady solve OSI is absent rather
     // than zero, so the vector is incomplete and the probability rests on a
@@ -1696,25 +1620,6 @@ function updateRadialGauges() {
 
 // 6. Setup Event Listeners
 function setupEventListeners() {
-    // Map Mode toggles
-    toggleTawssBtn.addEventListener("click", () => {
-        toggleTawssBtn.classList.add("active");
-        toggleOsiBtn.classList.remove("active");
-        currentMapMode = "TAWSS";
-        renderMapModeCaption();
-        drawHeatmap();
-        if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
-    });
-
-    toggleOsiBtn.addEventListener("click", () => {
-        toggleOsiBtn.classList.add("active");
-        toggleTawssBtn.classList.remove("active");
-        currentMapMode = "OSI";
-        renderMapModeCaption();
-        drawHeatmap();
-        if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
-    });
-
     // 2D Heatmap / 3D Nerve Model view switching
     view2dBtn.addEventListener("click", () => {
         view2dBtn.classList.add("active");
@@ -1914,7 +1819,17 @@ function openReportModal() {
         ? `<span class="color-high-risk"><i class="fa-solid fa-triangle-exclamation"></i> High Activation</span>`
         : `<span class="color-low-risk">Normal</span>`;
 
-    reportAnatomicalTargetEl.textContent = PHASES_SITE_LABELS[activePatient.demographics.site] || "Cerebral Aneurysm";
+    // The site is only known when the FILE recorded it. A DICOM header can carry
+    // it in the clinical-history tags and an annotated STL in its 80-byte
+    // header; a plain surface or volume from any other tool has no anatomical
+    // frame at all, and the 3D view then draws the sac at a representative
+    // location. Printing a named artery unqualified in the report would assert
+    // a finding nothing established — the same claim the 3D panel used to make
+    // before it said otherwise.
+    const site = activePatient.demographics.site;
+    reportAnatomicalTargetEl.textContent = site
+        ? PHASES_SITE_LABELS[site]
+        : "Not recorded in the supplied file";
 
     const phases = computePhasesScore(activePatient);
     reportPhasesBreakdownBodyEl.innerHTML = phases.items.map(item => `

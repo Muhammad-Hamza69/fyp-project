@@ -187,10 +187,23 @@ def test_dashboard_renders_the_validity_caveat():
     """
     A probability shown without its provenance is the most misleading element
     on the page. The card must always carry the synthetic-training caveat.
+
+    The headline probability, risk category and confidence were removed from the
+    card at the user's request; the SHAP attribution and the caveat stayed. That
+    resolves the concern this test guards in the strongest available way — the
+    number that could be misread is no longer displayed at all — but the caveat
+    still has to be there, because the feature attribution is just as much a
+    claim about a model trained on a synthetic cohort.
     """
     app = (REPO / "app.js").read_text(encoding="utf-8")
+    html = (REPO / "index.html").read_text(encoding="utf-8")
     assert "renderMlPrediction" in app
     assert "ml-validity" in app
     assert "synthetic" in app.lower()
-    # Confidence must be labelled as such, not conflated with probability.
-    assert "ml-confidence" in app
+    assert "ml-shap" in app, "the attribution is what the card is now for"
+
+    # And the headline numbers must stay gone: re-adding the markup without the
+    # renderer, or vice versa, would put a dash or a stale value back on screen.
+    for gone in ("ml-probability", "ml-category", "ml-confidence"):
+        assert gone not in html, f"{gone} was removed from the interface"
+        assert gone not in app, f"{gone} was removed from the interface"

@@ -7,7 +7,7 @@
  * Everything downstream died with it: the OSI, RRT and ECAP gauges, then
  * renderPhasesScore() and renderMlPrediction() further along the call chain,
  * and finally the click handlers bound after the first render — so Upload
- * DICOM, 3D Nerve Model, OSI Instability and Expand Case Review all stopped
+ * DICOM, 3D Nerve Model, the map toggles and Expand Case Review all stopped
  * responding.
  *
  * The suite had 116 tests at the time and not one of them noticed, because
@@ -159,23 +159,28 @@ check("PHASES breakdown is populated",
 
 // --- the reader must be told what they are looking at -----------------------
 //
-// Two questions that had to be answered in chat rather than by the page: what
-// the TAWSS / OSI toggles do, and what "12 pts" means. Both are now on screen.
+// The TAWSS / OSI colour toggle and its caption were removed from the interface
+// at the user's request, along with the PHASES plain-language band, the 3D
+// provenance panel and the AI headline numbers.
+//
+// Removing a control is where a dashboard breaks quietly: setupEventListeners
+// used to call toggleTawssBtn.addEventListener directly, and leaving that after
+// deleting the markup would throw a TypeError partway through binding, taking
+// every listener registered after it with it. That is exactly the failure this
+// file was written for, so the removals get asserted rather than assumed.
 {
-    const caption = $("map-mode-caption");
-    check("the colour mode explains itself on screen",
-          !!caption && (caption.textContent || "").length > 60,
-          `caption = ${JSON.stringify((caption && caption.textContent || "").slice(0, 40))}`);
-    const before = caption ? caption.textContent : "";
-
-    const osiBtn = $("toggle-osi-btn");
-    if (osiBtn) {
-        osiBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-        check("switching to OSI changes the explanation",
-              caption && caption.textContent !== before && /revers/i.test(caption.textContent),
-              `still: ${JSON.stringify((caption && caption.textContent || "").slice(0, 60))}`);
-        $("toggle-tawss-btn")?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (const id of ["toggle-tawss-btn", "toggle-osi-btn", "map-mode-caption",
+                      "phases-band", "ml-probability", "ml-category",
+                      "ml-confidence"]) {
+        check(`#${id} is gone`, $(id) === null);
     }
+    check("the 3D provenance panel is gone",
+          window.document.querySelector(".neuro-3d-provenance") === null);
+
+    // The colour mode still resolves — the OSI branches remain reachable in
+    // code, they simply have no control bound to them.
+    check("the heatmap still renders with the toggle removed",
+          !!window.document.getElementById("heatmap-canvas"));
 
     // PHASES must lead with a risk the reader can act on, not a raw point total.
     const pct = txt("phases-risk-percent");
@@ -186,9 +191,6 @@ check("PHASES breakdown is populated",
         check("PHASES gives the points a scale",
               /of \d+ possible/.test(txt("phases-points-max") || ""),
               `= ${JSON.stringify(txt("phases-points-max"))}`);
-        check("PHASES states the risk in plain language",
-              ($("phases-band")?.textContent || "").length > 20,
-              `band = ${JSON.stringify(($("phases-band")?.textContent || "").slice(0, 40))}`);
         check("PHASES repeats the risk as a natural frequency",
               /in every/.test(txt("phases-risk-natural") || ""),
               `= ${JSON.stringify(txt("phases-risk-natural"))}`);
@@ -197,8 +199,8 @@ check("PHASES breakdown is populated",
         check("with no clinical history, PHASES shows no risk figure",
               pct === "—" || pct === "-",
               `percent = ${JSON.stringify(pct)}`);
-        check("  ...and no stale plain-language band",
-              ($("phases-band")?.textContent || "") === "");
+        check("  ...and no stale natural frequency",
+              (txt("phases-risk-natural") || "") === "");
     }
 }
 
@@ -206,8 +208,10 @@ check("PHASES breakdown is populated",
 const mlCard = $("ml-card");
 const activeIsComputed = (txt("composite-risk-score") || "") !== "";
 if (mlCard && !mlCard.classList.contains("hidden")) {
-    check("AI probability renders", (txt("ml-probability") || "—") !== "—",
-          `ml-probability = ${txt("ml-probability")}`);
+    // The headline probability / category / confidence were removed. What the
+    // card keeps is the part that carries information: which features moved the
+    // model, and what the model is. A single percentage from a synthetic-cohort
+    // model with a 0.62 AUC is the piece most likely to be read as a finding.
     check("AI validity caveat is present",
           ($("ml-validity")?.textContent || "").toLowerCase().includes("synthetic"));
     check("AI SHAP bars render", ($("ml-shap")?.children.length || 0) > 0);
@@ -224,8 +228,9 @@ if (mlCard && !mlCard.classList.contains("hidden")) {
 const beforeClicks = errors.length;
 for (const [id, label] of [
     ["view-3d-btn", "3D Nerve Model"],
-    ["toggle-osi-btn", "OSI Instability"],
-    ["toggle-tawss-btn", "TAWSS Distribution"],
+    // toggle-osi-btn / toggle-tawss-btn removed from the interface; their
+    // absence is asserted above rather than here, so a missing button is a
+    // deliberate deletion in one place and a regression in the other.
     ["view-2d-btn", "2D Heatmap"],
     ["expand-case-btn", "Expand Case Review"],
     ["sidebar-upload-box", "Upload DICOM / MRA"],

@@ -231,15 +231,25 @@ console.log("\nabsent data is reported absent, not defaulted");
     }
 }
 
-// --- 5. neuro3d.js must actually publish that distinction ------------------
+// --- 5. the distinction must survive the panel that used to show it --------
+//
+// The 3D provenance caption was removed from the interface. The FACT it carried
+// did not go with it: the sac's size and shape are measured from the file, but
+// its position is only from the file when the file records an aneurysm site.
+// resolveSite still resolves that, the viewer still exposes it, and the case
+// report no longer prints a named artery when nothing named one.
 {
     const js = readFileSync(resolve(ROOT, "neuro3d.js"), "utf8");
-    check("neuro3d.js reports whether the site came from the file",
-          js.includes("fromFile") && js.includes("neuro-3d-sac-site"),
-          "the placeholder position would be captioned as recorded");
-    const html = readFileSync(resolve(ROOT, "index.html"), "utf8");
-    check("the 3D panel has an element to say it in",
-          html.includes('id="neuro-3d-sac-site"'));
+    check("neuro3d.js still resolves whether the site came from the file",
+          js.includes("siteFromFile") && js.includes("fromFile:"),
+          "the placeholder position would be indistinguishable from a recorded one");
+    check("the viewer exposes what the sac was built from",
+          js.includes("sacInfo"), "nothing downstream could ask");
+
+    const app = readFileSync(resolve(ROOT, "app.js"), "utf8");
+    check("the report does not name an artery the file never recorded",
+          app.includes("Not recorded in the supplied file"),
+          "reportAnatomicalTargetEl would print a default site as a finding");
 }
 
 console.log(failures ? `\n${failures} failure(s)` : "\nall checks passed");

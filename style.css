@@ -330,43 +330,6 @@ body {
     box-shadow: var(--shadow);
 }
 
-.toggle-group-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: #475569;
-    align-self: center;
-    padding-left: 6px;
-}
-
-/* The metric name alone ("TAWSS Distribution") assumes the reader knows what
-   TAWSS is. The subtitle says what it means in ordinary words. */
-.toggle-btn-sub {
-    display: block;
-    font-size: 9px;
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: 0;
-    opacity: 0.75;
-    margin-top: 1px;
-}
-
-/* Explains what the colours currently mean, next to the colours. */
-.map-mode-caption {
-    font-size: 11px;
-    line-height: 1.5;
-    color: var(--text-secondary);
-    background-color: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-left: 3px solid var(--color-accent);
-    border-radius: 5px;
-    padding: 8px 11px;
-}
-
-.map-mode-caption strong { color: var(--text-primary); }
-.map-caption-red { color: var(--color-high-risk); font-weight: 600; }
-.map-caption-blue { color: var(--color-accent); font-weight: 600; }
-
 /* Canvas Heatmap Area */
 .canvas-container {
     background-color: var(--bg-canvas);
@@ -563,42 +526,6 @@ body {
     display: none;
 }
 
-.ml-score-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    margin: 4px 0 10px;
-}
-
-.ml-prob {
-    display: block;
-    font-size: 28px;
-    font-weight: 700;
-    line-height: 1.05;
-    color: var(--text-primary);
-}
-
-.ml-prob-label,
-.ml-conf-label {
-    display: block;
-    font-size: 10px;
-    color: var(--text-secondary);
-}
-
-.ml-conf-wrap {
-    text-align: right;
-}
-
-.ml-category {
-    display: block;
-    font-size: 14px;
-    font-weight: 700;
-}
-
-.ml-category.tier-high { color: var(--color-high-risk); }
-.ml-category.tier-mod  { color: var(--color-mod-risk); }
-.ml-category.tier-low  { color: var(--color-low-risk); }
 
 .ml-incomplete {
     margin-bottom: 9px;
@@ -703,54 +630,6 @@ body {
 
 .composite-bound-note.hidden {
     display: none;
-}
-
-/* Provenance strip under the 3D view: says which part of the render is
-   measured data and which is generic anatomy. Sits bottom-left so it does not
-   collide with the colour legend at bottom-right. */
-.neuro-3d-provenance {
-    position: absolute;
-    bottom: 12px;
-    left: 12px;
-    max-width: 46ch;
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--text-secondary);
-    background-color: rgba(255, 255, 255, 0.88);
-    padding: 7px 10px;
-    border-radius: 4px;
-    border-left: 3px solid var(--color-low-risk, #1F5F99);
-    pointer-events: none;
-}
-
-.neuro-3d-provenance strong {
-    color: var(--text-primary);
-}
-
-/* An estimated case renders an identically sharp sac, so the distinction has
-   to carry visually as well as in the wording. */
-#neuro-3d-sac-source.is-demo {
-    color: var(--color-mod-risk, #B8860B);
-    font-weight: 600;
-}
-
-/* The sac's SIZE is measured from the uploaded file; its POSITION only is when
-   the file records an aneurysm site. A plain STL or NIfTI from another tool
-   carries no anatomical frame, so the sac is drawn at a representative
-   location — which looked exactly as authoritative as the measured dome beside
-   it until this said otherwise. */
-#neuro-3d-sac-site.is-placeholder {
-    color: var(--color-mod-risk, #B8860B);
-    font-weight: 600;
-}
-
-/* Below this the two overlays would overlap; the provenance note is the one
-   that can be dropped, because the colour legend is unreadable without its
-   swatches whereas this text is repeated in the report. */
-@media (max-width: 900px) {
-    .neuro-3d-provenance {
-        display: none;
-    }
 }
 
 .neuro-3d-legend {
@@ -1012,33 +891,6 @@ body {
     color: var(--text-secondary);
     font-style: italic;
     margin-top: 4px;
-}
-
-.phases-band {
-    font-size: 10.5px;
-    line-height: 1.45;
-    padding: 7px 9px;
-    border-radius: 5px;
-    border-left: 3px solid var(--text-secondary);
-    background-color: rgba(148, 163, 184, 0.10);
-    color: var(--text-secondary);
-}
-
-.phases-band:empty { display: none; }
-
-.phases-band-low {
-    border-left-color: var(--color-low-risk);
-    background-color: rgba(30, 140, 78, 0.10);
-}
-
-.phases-band-moderate {
-    border-left-color: var(--color-mod-risk);
-    background-color: rgba(196, 125, 26, 0.10);
-}
-
-.phases-band-high {
-    border-left-color: var(--color-high-risk);
-    background-color: rgba(190, 52, 52, 0.10);
 }
 
 .phases-points-line {
