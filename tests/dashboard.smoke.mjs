@@ -157,6 +157,51 @@ check("PHASES breakdown is populated",
       !!phasesRows && phasesRows.children.length > 0,
       `#phases-breakdown children = ${phasesRows ? phasesRows.children.length : "n/a"}`);
 
+// --- the reader must be told what they are looking at -----------------------
+//
+// Two questions that had to be answered in chat rather than by the page: what
+// the TAWSS / OSI toggles do, and what "12 pts" means. Both are now on screen.
+{
+    const caption = $("map-mode-caption");
+    check("the colour mode explains itself on screen",
+          !!caption && (caption.textContent || "").length > 60,
+          `caption = ${JSON.stringify((caption && caption.textContent || "").slice(0, 40))}`);
+    const before = caption ? caption.textContent : "";
+
+    const osiBtn = $("toggle-osi-btn");
+    if (osiBtn) {
+        osiBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        check("switching to OSI changes the explanation",
+              caption && caption.textContent !== before && /revers/i.test(caption.textContent),
+              `still: ${JSON.stringify((caption && caption.textContent || "").slice(0, 60))}`);
+        $("toggle-tawss-btn")?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    }
+
+    // PHASES must lead with a risk the reader can act on, not a raw point total.
+    const pct = txt("phases-risk-percent");
+    const pts = txt("phases-total-points");
+    if (pts && pts !== "n/a") {
+        check("PHASES shows a 5-year risk, not only points",
+              !!pct && /%$/.test(pct), `percent = ${JSON.stringify(pct)}`);
+        check("PHASES gives the points a scale",
+              /of \d+ possible/.test(txt("phases-points-max") || ""),
+              `= ${JSON.stringify(txt("phases-points-max"))}`);
+        check("PHASES states the risk in plain language",
+              ($("phases-band")?.textContent || "").length > 20,
+              `band = ${JSON.stringify(($("phases-band")?.textContent || "").slice(0, 40))}`);
+        check("PHASES repeats the risk as a natural frequency",
+              /in every/.test(txt("phases-risk-natural") || ""),
+              `= ${JSON.stringify(txt("phases-risk-natural"))}`);
+    } else {
+        // The absent-history path must not leave stale text behind.
+        check("with no clinical history, PHASES shows no risk figure",
+              pct === "—" || pct === "-",
+              `percent = ${JSON.stringify(pct)}`);
+        check("  ...and no stale plain-language band",
+              ($("phases-band")?.textContent || "") === "");
+    }
+}
+
 // --- the AI card ------------------------------------------------------------
 const mlCard = $("ml-card");
 const activeIsComputed = (txt("composite-risk-score") || "") !== "";

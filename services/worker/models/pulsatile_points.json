@@ -1,4 +1,7 @@
 {
+  "generatedAt": "2026-08-05T23:51:46",
+  "solver": "OpenFOAM ESI v2412 pimpleFoam (transient, 1 cardiac cycle)",
+  "note": "Every point is a real transient solve. OSI cannot be obtained from a steady solution \u2014 it is identically zero there by construction.",
   "points": [
     {
       "case": "PT-2026-0103",
@@ -47,6 +50,25 @@
         0.808
       ],
       "cycle_fraction": 0.653
+    },
+    {
+      "case": "osi_r0180",
+      "sac_radius_m": 0.0018,
+      "dome_mm": 3.59,
+      "neck_mm": 2.22,
+      "aspect_ratio": 1.46,
+      "sac_tawss_pa": 0.1112,
+      "sac_osi": 0.0015,
+      "sac_ecap": 0.039,
+      "parent_tawss_pa": 2.8749,
+      "parent_osi": 0.0,
+      "nwss": 0.0387,
+      "avg_window": [
+        0.1,
+        0.9
+      ],
+      "cycle_fraction": 1.0,
+      "mesh": "coarse (0.7 mm base, 1 refinement level, 2 layers)"
     }
   ]
 }

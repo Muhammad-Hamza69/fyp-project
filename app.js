@@ -369,6 +369,60 @@ function phasesRiskPercentFromPoints(points) {
 }
 
 /**
+ * The highest total the score can reach, so a points figure has a scale.
+ *
+ * "12 pts" on its own is unreadable: the reader does not know whether the
+ * maximum is 15 or 150, and PHASES is not linear in risk anyway — 1 point is
+ * 0.4% and 12 points is 17.8%, a 45-fold difference across a range that looks
+ * modest. Showing "of 22" at least fixes the first problem; leading with the
+ * percentage fixes the second.
+ */
+const PHASES_MAX_POINTS =
+      5      // Population: Finnish
+    + 1      // Hypertension: yes
+    + 1      // Age: >= 70
+    + 10     // Size: >= 20 mm
+    + 4      // Earlier SAH: yes
+    + 4;     // Site: ACOM / PCOM / posterior circulation
+
+/**
+ * Plain-language reading of a 5-year rupture risk.
+ *
+ * Bands follow how the PHASES authors and subsequent guidance discuss the
+ * score: under ~1% over five years is the range in which conservative
+ * management is usual, and above ~5% is where intervention is typically
+ * weighed. They are a reading aid for the number, not a treatment
+ * recommendation, and the card says so.
+ */
+function phasesBand(percent) {
+    if (percent < 1.0) {
+        return { label: "Low", cls: "phases-band-low",
+                 text: "In the range where imaging follow-up is usually preferred "
+                     + "over intervention." };
+    }
+    if (percent < 3.0) {
+        return { label: "Moderate", cls: "phases-band-moderate",
+                 text: "Usually managed with surveillance, weighing patient age "
+                     + "and preference." };
+    }
+    if (percent < 7.0) {
+        return { label: "High", cls: "phases-band-high",
+                 text: "In the range where treatment is commonly discussed "
+                     + "against the risks of the procedure itself." };
+    }
+    return { label: "Very high", cls: "phases-band-high",
+             text: "Well above the range where intervention is normally "
+                 + "considered." };
+}
+
+/** "about 5 in 100 people" — small percentages are widely misread. */
+function naturalFrequency(percent) {
+    if (percent >= 10) return `roughly ${Math.round(percent)} in every 100 people with this profile`;
+    if (percent >= 1) return `roughly ${Math.round(percent)} in every 100 people with this profile`;
+    return `roughly ${Math.round(percent * 10)} in every 1,000 people with this profile`;
+}
+
+/**
  * Which PHASES inputs this case actually has.
  *
  * PHASES needs clinical history — hypertension, prior subarachnoid haemorrhage,
@@ -413,6 +467,39 @@ function computePhasesScore(patient) {
 // Global App State
 let activePatient = patientDatabase["PT-2025-0041"];
 let currentMapMode = "TAWSS"; // TAWSS or OSI
+
+/**
+ * What each colour mode is showing.
+ *
+ * The two toggles change WHICH hemodynamic quantity is painted onto the vessel,
+ * in both the 2D map and the 3D sac. They do not change the case, and they do
+ * not change any of the numbers in the telemetry panel. Nothing on screen said
+ * that, so two differently-coloured pictures of the same solve appeared with no
+ * explanation of what had changed between them.
+ *
+ * They are shown separately rather than combined because they capture different
+ * failure modes and an aneurysm can have either without the other: low shear is
+ * about flow being too WEAK, oscillation is about it being too DISORDERED.
+ */
+const MAP_MODE_CAPTIONS = {
+    TAWSS: "<strong>TAWSS — time-averaged wall shear stress.</strong> "
+         + "How hard blood drags along the vessel wall, averaged over a heartbeat. "
+         + "<span class=\"map-caption-red\">Red = low shear</span>, where flow is "
+         + "sluggish and the wall is starved — below 0.4 Pa is associated with wall "
+         + "degeneration. <span class=\"map-caption-blue\">Blue = healthy shear</span>, "
+         + "as in the parent artery.",
+    OSI: "<strong>OSI — oscillatory shear index.</strong> "
+       + "How much the flow reverses direction during a heartbeat, 0 (always one way) "
+       + "to 0.5 (fully reversing). <span class=\"map-caption-red\">Red = disturbed, "
+       + "swirling flow</span>; <span class=\"map-caption-blue\">blue = smooth, "
+       + "unidirectional flow</span>. Independent of TAWSS above: a sac can be "
+       + "stagnant without swirling, or swirling without being stagnant.",
+};
+
+function renderMapModeCaption() {
+    const el = document.getElementById("map-mode-caption");
+    if (el) el.innerHTML = MAP_MODE_CAPTIONS[currentMapMode] || "";
+}
 let hoverZone = null;
 
 // DOM Elements - Dashboard View
@@ -474,6 +561,9 @@ const breakdownAspectPctEl = document.getElementById("breakdown-aspect-pct");
 // DOM Elements - PHASES Clinical Risk Score
 const phasesTotalPointsEl = document.getElementById("phases-total-points");
 const phasesRiskPercentEl = document.getElementById("phases-risk-percent");
+const phasesRiskNaturalEl = document.getElementById("phases-risk-natural");
+const phasesBandEl = document.getElementById("phases-band");
+const phasesPointsMaxEl = document.getElementById("phases-points-max");
 const phasesBreakdownEl = document.getElementById("phases-breakdown");
 
 // DOM Elements - Modals
@@ -694,6 +784,8 @@ async function initApp() {
     // must not be drawn with their authored numbers even once.
     const nDerived = deriveCuratedHemodynamics();
 
+    renderMapModeCaption();
+
     // Test seam. The smoke suite has to assert that no case is still carrying
     // authored hemodynamics, and there is no way to see that from the DOM — the
     // gauges render a number either way. Without this the assertion passes
@@ -848,6 +940,9 @@ function renderPhasesScore(patient) {
         phasesTotalPointsEl.classList.add("gauge-not-computed");
         phasesRiskPercentEl.textContent = "—";
         phasesRiskPercentEl.classList.add("gauge-not-computed");
+        if (phasesRiskNaturalEl) phasesRiskNaturalEl.textContent = "";
+        if (phasesPointsMaxEl) phasesPointsMaxEl.textContent = "";
+        if (phasesBandEl) { phasesBandEl.textContent = ""; phasesBandEl.className = "phases-band"; }
         phasesBreakdownEl.innerHTML =
             `<div class="phases-missing">
                <i class="fa-solid fa-circle-info"></i>
@@ -860,15 +955,31 @@ function renderPhasesScore(patient) {
 
     const { items, points, riskPercent } = computePhasesScore(patient);
 
-    phasesTotalPointsEl.textContent = points;
-    phasesTotalPointsEl.classList.remove("gauge-not-computed");
+    // The percentage leads. It is the quantity that means something without
+    // knowing the scoring system, and it is what the points exist to produce.
     phasesRiskPercentEl.textContent = `${riskPercent.toFixed(1)}%`;
     phasesRiskPercentEl.classList.remove("gauge-not-computed");
+    if (phasesRiskNaturalEl) phasesRiskNaturalEl.textContent = naturalFrequency(riskPercent);
+
+    const band = phasesBand(riskPercent);
+    if (phasesBandEl) {
+        phasesBandEl.className = `phases-band ${band.cls}`;
+        phasesBandEl.innerHTML =
+            `<strong>${band.label}</strong> — ${band.text}`;
+    }
+
+    // Points demoted to the working, with the maximum shown so the figure has
+    // a scale. Note the score is NOT linear in risk: 1 point is 0.4% and 12 is
+    // 17.8%, so reading the points as if they were a percentage is wrong by a
+    // factor of more than forty at the top of the range.
+    phasesTotalPointsEl.textContent = points;
+    phasesTotalPointsEl.classList.remove("gauge-not-computed");
+    if (phasesPointsMaxEl) phasesPointsMaxEl.textContent = `of ${PHASES_MAX_POINTS} possible`;
 
     phasesBreakdownEl.innerHTML = items.map(item => `
         <div class="phases-breakdown-row">
             <span>${item.label} (${item.value})</span>
-            <span>${item.points} pt${item.points === 1 ? '' : 's'}</span>
+            <span>${item.points > 0 ? "+" : ""}${item.points}</span>
         </div>
     `).join("");
 }
@@ -1590,6 +1701,7 @@ function setupEventListeners() {
         toggleTawssBtn.classList.add("active");
         toggleOsiBtn.classList.remove("active");
         currentMapMode = "TAWSS";
+        renderMapModeCaption();
         drawHeatmap();
         if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
     });
@@ -1598,6 +1710,7 @@ function setupEventListeners() {
         toggleOsiBtn.classList.add("active");
         toggleTawssBtn.classList.remove("active");
         currentMapMode = "OSI";
+        renderMapModeCaption();
         drawHeatmap();
         if (window.NeuroViewer) window.NeuroViewer.applyRiskColors(activePatient, currentMapMode);
     });

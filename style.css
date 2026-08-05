@@ -330,6 +330,43 @@ body {
     box-shadow: var(--shadow);
 }
 
+.toggle-group-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #475569;
+    align-self: center;
+    padding-left: 6px;
+}
+
+/* The metric name alone ("TAWSS Distribution") assumes the reader knows what
+   TAWSS is. The subtitle says what it means in ordinary words. */
+.toggle-btn-sub {
+    display: block;
+    font-size: 9px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.75;
+    margin-top: 1px;
+}
+
+/* Explains what the colours currently mean, next to the colours. */
+.map-mode-caption {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid var(--color-accent);
+    border-radius: 5px;
+    padding: 8px 11px;
+}
+
+.map-mode-caption strong { color: var(--text-primary); }
+.map-caption-red { color: var(--color-high-risk); font-weight: 600; }
+.map-caption-blue { color: var(--color-accent); font-weight: 600; }
+
 /* Canvas Heatmap Area */
 .canvas-container {
     background-color: var(--bg-canvas);
@@ -938,37 +975,88 @@ body {
     gap: 10px;
 }
 
-.phases-score-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-.phases-score-value-wrap,
-.phases-risk-percent-wrap {
+/* The RISK leads and the points follow, because "12 pts" is unreadable on its
+   own: the scale is unfamiliar, its maximum is not in view, and PHASES is not
+   linear in risk — 1 point is 0.4% and 12 points is 17.8%. The two used to sit
+   side by side in equal-weight boxes, which invited reading the points as the
+   answer. */
+.phases-headline {
     background-color: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 10px;
+    padding: 12px 10px;
     text-align: center;
 }
 
-.phases-points,
 .phases-percent {
     display: block;
-    font-size: 20px;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.05;
+    color: var(--text-primary);
+}
+
+.phases-percent-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+}
+
+/* Same number as a natural frequency. Small percentages are widely misread —
+   "1.3%" is routinely heard as either negligible or alarming depending on the
+   reader, whereas "13 in every 1,000" is not. */
+.phases-natural {
+    display: block;
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 4px;
+}
+
+.phases-band {
+    font-size: 10.5px;
+    line-height: 1.45;
+    padding: 7px 9px;
+    border-radius: 5px;
+    border-left: 3px solid var(--text-secondary);
+    background-color: rgba(148, 163, 184, 0.10);
+    color: var(--text-secondary);
+}
+
+.phases-band:empty { display: none; }
+
+.phases-band-low {
+    border-left-color: var(--color-low-risk);
+    background-color: rgba(30, 140, 78, 0.10);
+}
+
+.phases-band-moderate {
+    border-left-color: var(--color-mod-risk);
+    background-color: rgba(196, 125, 26, 0.10);
+}
+
+.phases-band-high {
+    border-left-color: var(--color-high-risk);
+    background-color: rgba(190, 52, 52, 0.10);
+}
+
+.phases-points-line {
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.phases-points {
+    font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
 }
 
-.phases-points-label,
-.phases-percent-label {
-    display: block;
-    font-size: 9px;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    margin-top: 2px;
+.phases-points-max {
+    font-size: 9.5px;
 }
 
 .phases-breakdown {

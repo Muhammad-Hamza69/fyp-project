@@ -114,15 +114,27 @@
                             <i class="fa-solid fa-cube"></i> 3D Nerve Model
                         </button>
                     </div>
-                    <div class="toggle-control-group">
-                        <button id="toggle-tawss-btn" class="toggle-btn active" data-map="TAWSS">
-                            TAWSS Distribution
+                    <!-- These two do not change the case or the numbers. They change
+                         WHICH quantity the colours represent, in both the 2D map and
+                         the 3D sac. Two different failure modes, two different
+                         pictures of the same solve. -->
+                    <div class="toggle-control-group" role="group" aria-label="Colour the map by">
+                        <span class="toggle-group-label">Colour by</span>
+                        <button id="toggle-tawss-btn" class="toggle-btn active" data-map="TAWSS"
+                                title="Colour by wall shear stress — how hard blood drags along the vessel wall. Low values (below 0.4 Pa) mark stagnant regions where the wall is starved of flow.">
+                            TAWSS <span class="toggle-btn-sub">shear stress</span>
                         </button>
-                        <button id="toggle-osi-btn" class="toggle-btn" data-map="OSI">
-                            OSI Instability
+                        <button id="toggle-osi-btn" class="toggle-btn" data-map="OSI"
+                                title="Colour by oscillatory shear index — how much the flow direction reverses during a heartbeat. High values mark disturbed, swirling regions.">
+                            OSI <span class="toggle-btn-sub">flow reversal</span>
                         </button>
                     </div>
                 </div>
+
+                <!-- Says what the colours currently mean. Without it the two
+                     toggles produce two differently-coloured pictures of the same
+                     case and nothing on screen explains why they differ. -->
+                <p id="map-mode-caption" class="map-mode-caption"></p>
 
                 <div class="canvas-container">
                     <!-- 2D Heatmap View -->
@@ -368,15 +380,22 @@
                     <!-- PHASES Clinical Risk Score: demographic/morphological score, independent of the CFD sim -->
                     <div class="card metric-card phases-card">
                         <h3 class="card-title">Clinical Risk Score (PHASES)</h3>
-                        <div class="phases-score-row">
-                            <div class="phases-score-value-wrap">
-                                <span id="phases-total-points" class="phases-points">0</span>
-                                <span class="phases-points-label">Points</span>
-                            </div>
-                            <div class="phases-risk-percent-wrap">
-                                <span id="phases-risk-percent" class="phases-percent">0.0%</span>
-                                <span class="phases-percent-label">5-yr Rupture Risk</span>
-                            </div>
+                        <!-- The RISK is the headline; the points are the working.
+                             It used to be the other way round, and "12 pts" tells a
+                             reader nothing on its own — the scale is unfamiliar, it
+                             has no natural maximum in view, and it is not linear in
+                             risk. The percentage is the number a clinician acts on. -->
+                        <div class="phases-headline">
+                            <span id="phases-risk-percent" class="phases-percent">&mdash;</span>
+                            <span class="phases-percent-label">chance of rupture in the next 5 years</span>
+                            <!-- Percentages of small risks are widely misread, so the
+                                 same number is repeated as a natural frequency. -->
+                            <span id="phases-risk-natural" class="phases-natural"></span>
+                        </div>
+                        <div id="phases-band" class="phases-band"></div>
+                        <div class="phases-points-line">
+                            PHASES score <span id="phases-total-points" class="phases-points">&mdash;</span>
+                            <span id="phases-points-max" class="phases-points-max"></span>
                         </div>
                         <div class="phases-breakdown" id="phases-breakdown"></div>
                         <p class="phases-card-note">Demographic &amp; morphological score (Greving et al., PHASES) &mdash;
