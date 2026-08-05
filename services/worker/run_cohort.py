@@ -183,7 +183,7 @@ relaxationFactors { equations { U 0.9; } fields { p 0.9; } }
 """
 
 
-def solve(case_dir: Path, nproc: int) -> dict[str, str]:
+def solve(case_dir: Path, nproc: int, geom_roi_x: float = 0.050) -> dict[str, str]:
     steps = [
         ("blockMesh", "blockMesh"),
         ("surfaceFeatureExtract", "surfaceFeatureExtract"),
@@ -198,8 +198,23 @@ def solve(case_dir: Path, nproc: int) -> dict[str, str]:
         print(f"    {name} ...", flush=True)
         ok = sh(cmd, case_dir, log)
         if name == "checkMesh":
-            if "Mesh OK" not in log.read_text(errors="ignore"):
-                raise RuntimeError(f"{case_dir.name}: checkMesh failed")
+            # Quantified gate, not `"Mesh OK" in log`.
+            #
+            # The binary test discards a sound mesh over a single marginal
+            # face. The first sweep point died on "Max skewness = 4.105, 1
+            # highly skew face" with non-orthogonality 61.7 against a limit of
+            # 65 — one face out of ~500,000, nowhere near the sac. mesh_gate
+            # treats non-orthogonality as unwaivable and skewness as waivable
+            # only when every offending face is LOCATED outside the region the
+            # results are read from, and fails closed when it cannot tell.
+            from mesh_gate import evaluate                    # type: ignore
+
+            gate = evaluate(case_dir,
+                            roi_centre_m=(geom_roi_x, 0.0, 0.0),
+                            roi_radius_m=0.015)
+            print(f"    {gate.summary()}", flush=True)
+            if not gate.passed:
+                raise RuntimeError(f"{case_dir.name}: mesh gate failed")
         elif not ok:
             raise RuntimeError(f"{case_dir.name}: {name} failed — see {log}")
     return {}

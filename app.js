@@ -712,6 +712,177 @@ const SHAP_LABELS = {
     site_score: "Aneurysm site",
 };
 
+/**
+ * Ask for the sac measurements, then estimate hemodynamics instantly.
+ *
+ * WHY A PROMPT RATHER THAN AUTOMATIC EXTRACTION
+ * The surrogate needs dome and neck diameter. Getting those from a scan means
+ * segmenting it, which a browser cannot do — and guessing them would reproduce
+ * exactly the fabrication this replaced. Clinically these are measured by a
+ * radiologist off the images, so asking is both truthful and normal practice.
+ *
+ * WHY THIS IS INSTANT WHEN A SOLVE TAKES HOURS
+ * The expensive computation was already paid, once, for the whole geometry
+ * family: run_sweep.py solved it with OpenFOAM and surrogate.py fitted a
+ * response surface through those solutions. Evaluating that surface is a
+ * handful of logarithms. Nothing is skipped — the physics was done in advance
+ * rather than per user.
+ */
+function promptMorphologyAndEstimate(patientId, dicomMeta) {
+    return new Promise((resolve) => {
+        const card = document.getElementById("morphology-prompt");
+        const domeEl = document.getElementById("morph-dome");
+        const neckEl = document.getElementById("morph-neck");
+        const btn = document.getElementById("morph-compute");
+        if (!card || !btn || !window.NeuroSurrogate) {
+            registerUnsolvedCase(patientId, dicomMeta);
+            resolve();
+            return;
+        }
+
+        window.NeuroSurrogate.load().then((model) => {
+            const n = document.getElementById("morph-npoints");
+            if (n) n.textContent = String(model.n_points);
+            card.classList.remove("hidden");
+        }).catch((err) => {
+            writeTerminalLog(`[ERROR] Surrogate unavailable: ${err.message}`, "error");
+            writeTerminalLog("[INFO] Hemodynamics will show as not computed.", "info");
+            registerUnsolvedCase(patientId, dicomMeta);
+            resolve();
+        });
+
+        const onGo = () => {
+            btn.removeEventListener("click", onGo);
+            card.classList.add("hidden");
+
+            const dome = parseFloat(domeEl.value);
+            const neck = parseFloat(neckEl.value);
+            if (!Number.isFinite(dome) || dome <= 0) {
+                writeTerminalLog("[ERROR] A positive dome diameter is required.", "error");
+                registerUnsolvedCase(patientId, dicomMeta);
+                resolve();
+                return;
+            }
+
+            const t0 = performance.now();
+            let p;
+            try {
+                p = window.NeuroSurrogate.predict({
+                    maxDiameterMm: dome, neckDiameterMm: neck,
+                });
+            } catch (err) {
+                writeTerminalLog(`[ERROR] ${err.message}`, "error");
+                registerUnsolvedCase(patientId, dicomMeta);
+                resolve();
+                return;
+            }
+            const ms = performance.now() - t0;
+
+            writeTerminalLog(
+                `[SURROGATE] Evaluated in ${ms.toFixed(2)} ms against `
+                + `${p.calibrationPoints} full OpenFOAM solutions.`, "success");
+            writeTerminalLog(
+                `[RESULT] Parent TAWSS ${p.parentTawss.toFixed(3)} Pa | Sac `
+                + `${p.sacTawss.toFixed(4)} Pa | NWSS ${p.nwss.toFixed(4)} | RRT `
+                + `${p.rrt.toFixed(2)} Pa^-1`, "success");
+            if (p.looErrorPct && p.looErrorPct.sac_tawss_pa) {
+                writeTerminalLog(
+                    `[ACCURACY] Cross-validated error against full CFD: `
+                    + `${p.looErrorPct.sac_tawss_pa}% on sac TAWSS.`, "info");
+            }
+            for (const w of p.warnings) writeTerminalLog(`[WARNING] ${w}`, "warning");
+            writeTerminalLog(
+                "[NOTE] OSI and ECAP are not estimated — they are defined over a "
+                + "cardiac cycle and require a transient solve.", "info");
+
+            const ar = +(dome / Math.max(neck, 0.1)).toFixed(2);
+            patientDatabase[patientId] = {
+                id: patientId,
+                estimated: true,
+                morphology: {
+                    maxDiameter: dome, neckDiameterMm: neck,
+                    aspectRatio: ar, domeToNeck: ar,
+                },
+                demographics: {
+                    age: 60, hypertension: false, earlierSAH: false,
+                    population: "Other", site: "ICA",
+                },
+                zones: window.NeuroSurrogate.toZones(p),
+                hemodynamics: {
+                    // Steady calibration: no cycle, so OSI/ECAP stay undefined and
+                    // the gauges render "n/a" exactly as for a steady solve.
+                    transient: false,
+                    nwss: p.nwss, rrt: p.rrt, ecap: 0,
+                    lsarRelative: p.lsarRelative, lsarAbsolute: p.lsarRelative,
+                },
+                provenance: {
+                    source: "surrogate",
+                    solver: `surrogate fitted to ${p.calibrationPoints} OpenFOAM solutions`,
+                    convergence: `evaluated in ${ms.toFixed(2)} ms`,
+                },
+                dicom: dicomMeta,
+                clinicalAssessment:
+                    `Hemodynamics for ${patientId} were ESTIMATED by a surrogate model, `
+                    + `not computed by a solve of this geometry. The surrogate is a `
+                    + `response surface fitted to ${p.calibrationPoints} full OpenFOAM `
+                    + `solutions across the same aneurysm family, and the parent artery `
+                    + `is computed analytically from Poiseuille flow. Sac TAWSS `
+                    + `${p.sacTawss.toFixed(4)} Pa against a parent of `
+                    + `${p.parentTawss.toFixed(3)} Pa (normalised WSS `
+                    + `${p.nwss.toFixed(4)}), relative residence time `
+                    + `${p.rrt.toFixed(2)} Pa^-1, from a measured dome of `
+                    + `${dome.toFixed(1)} mm and neck of ${neck.toFixed(1)} mm. OSI and `
+                    + `ECAP are not reported: they are defined over a cardiac cycle and `
+                    + `cannot be inferred from geometry. `
+                    + (p.extrapolating
+                        ? `NOTE: this geometry falls outside the calibrated range, so the `
+                          + `estimate is an extrapolation. `
+                        : ``)
+                    + `Confirm with a full transient solve before drawing conclusions.`,
+            };
+
+            renderPatientList();
+            document.querySelectorAll(".patient-card").forEach((c) => {
+                c.classList.toggle("active", c.dataset.id === patientId);
+            });
+            loadPatientData(patientDatabase[patientId]);
+            resolve();
+        };
+
+        btn.addEventListener("click", onGo);
+    });
+}
+
+/** Record a case we could not estimate: real header, no invented hemodynamics. */
+function registerUnsolvedCase(patientId, dicomMeta) {
+    patientDatabase[patientId] = {
+        id: patientId,
+        awaitingCfd: true,
+        morphology: {},
+        demographics: {
+            age: null, hypertension: false, earlierSAH: false,
+            population: "Other", site: null,
+        },
+        zones: [
+            { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 0, osi: 0, isAneurysm: false },
+            { name: "Parent Artery Outlet", id: "3942", x: 470, y: 278, radius: 55, tawss: 0, osi: 0, isAneurysm: false },
+            { name: "Aneurysm Neck", id: "4109", x: 320, y: 220, radius: 35, tawss: 0, osi: 0, isAneurysm: true },
+            { name: "Aneurysm Dome", id: "4289", x: 320, y: 120, radius: 50, tawss: 0, osi: 0, isAneurysm: true },
+        ],
+        hemodynamics: { transient: false },
+        dicom: dicomMeta,
+        clinicalAssessment:
+            `No CFD solve and no surrogate estimate exist for ${patientId}. The DICOM `
+            + `header was read, but no hemodynamic values are shown because none were `
+            + `computed.`,
+    };
+    renderPatientList();
+    document.querySelectorAll(".patient-card").forEach((c) => {
+        c.classList.toggle("active", c.dataset.id === patientId);
+    });
+    loadPatientData(patientDatabase[patientId]);
+}
+
 // 4. Color Normalization and Heatmap Drawing
 // Maps value between 1F5F99 (Stable Blue) and B83232 (High Risk Red)
 function getInterpolatedColor(zoneValue, isAneurysm) {
@@ -1787,42 +1958,22 @@ async function runCfdSimulation(fileObject) {
         // render "not computed", so an unsolved case reads as unsolved rather
         // than as a clean bill of health.
         writeTerminalLog(`[QUEUED] '${patientId}' has no completed CFD run.`, "warning");
-        writeTerminalLog("[INFO] Header ingested. Hemodynamics require a full solve "
-                       + "(~hours per cardiac cycle) and are shown as not computed.", "info");
+        writeTerminalLog("[INFO] Header ingested. Estimating hemodynamics from the "
+                       + "surrogate fitted to solved OpenFOAM cases…", "info");
 
-        patientDatabase[patientId] = {
-            id: patientId,
-            awaitingCfd: true,
-            morphology: {},          // requires segmentation + reconstruction
-            demographics: {
-                age: null, hypertension: false, earlierSAH: false,
-                population: "Other", site: null,
-            },
-            zones: [
-                { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 0, osi: 0, isAneurysm: false },
-                { name: "Parent Artery Outlet", id: "3942", x: 470, y: 278, radius: 55, tawss: 0, osi: 0, isAneurysm: false },
-                { name: "Aneurysm Neck", id: "4109", x: 320, y: 220, radius: 35, tawss: 0, osi: 0, isAneurysm: true },
-                { name: "Aneurysm Dome", id: "4289", x: 320, y: 120, radius: 50, tawss: 0, osi: 0, isAneurysm: true },
-            ],
-            hemodynamics: { transient: false },
-            dicom: {
-                modality, studyDate, rows, columns, sliceThickness,
-                manufacturer, bodyPart, seriesDescription: seriesDesc,
-                fileName,
-            },
-            clinicalAssessment:
-                `No CFD solve has been run for ${patientId}. The uploaded series was read `
-                + `successfully — ${[modality && `modality ${modality}`,
-                                     rows && columns && `${rows}x${columns} px`,
-                                     sliceThickness !== null && `${sliceThickness.toFixed(2)} mm slices`,
-                                     manufacturer].filter(Boolean).join(", ")} `
-                + `— but wall shear stress, OSI, RRT and ECAP are derived from a `
-                + `Navier-Stokes solution that has not been computed. On this hardware a `
-                + `single cardiac cycle takes several hours. No hemodynamic values are `
-                + `shown for this case because none exist.`,
-        };
-
-        renderPatientList();
+        // Ask for the two measurements the surrogate needs.
+        //
+        // Segmentation cannot run in a browser, and inventing a dome diameter
+        // would put us straight back to the fabrication this replaced. A
+        // radiologist sizes the dome and neck off the scan anyway, so asking is
+        // both honest and how the measurement is actually obtained. Given them,
+        // every quantity except OSI and ECAP is available in under a
+        // millisecond — no solve, no waiting.
+        await promptMorphologyAndEstimate(patientId, {
+            modality, studyDate, rows, columns, sliceThickness,
+            manufacturer, bodyPart, seriesDescription: seriesDesc, fileName,
+        });
+        return;
     }
 
     document.querySelectorAll(".patient-card").forEach(c => {

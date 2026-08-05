@@ -2290,3 +2290,79 @@ body {
 .terminal-output {
     overflow-x: auto;
 }
+
+/* ---- Sac measurement prompt (upload -> instant surrogate estimate) --------
+   Appears only when an uploaded scan has no completed CFD run. Segmentation
+   cannot run in a browser, so the two dimensions the surrogate needs are asked
+   for rather than invented. */
+.sim-morphology-card {
+    margin-top: 10px;
+    background-color: #0d1b2c;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.sim-morphology-card.hidden { display: none; }
+
+.sim-morphology-card .morph-body { padding: 12px 14px; }
+
+.morph-note {
+    margin: 0 0 10px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #cbd5e1;
+}
+
+.morph-fields {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.morph-fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10.5px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.morph-input-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #071120;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 4px;
+    padding: 5px 8px;
+}
+
+.morph-input-wrap input {
+    width: 74px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e2e8f0;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.morph-unit { font-size: 10.5px; color: #64748b; }
+
+.morph-go { cursor: pointer; }
+
+/* The caveat is part of the control, not a footnote: OSI cannot be estimated
+   from geometry, and the user has to see that before reading the numbers. */
+.morph-caveat {
+    margin: 10px 0 0;
+    font-size: 10px;
+    line-height: 1.5;
+    color: #94a3b8;
+    border-left: 3px solid var(--color-mod-risk, #B8860B);
+    padding-left: 8px;
+}

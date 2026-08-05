@@ -706,6 +706,52 @@
                             <!-- Logs will stream here dynamically -->
                         </div>
                     </div>
+
+                    <!--
+                        Shown only when an uploaded scan belongs to a patient with no
+                        completed CFD run.
+
+                        Segmentation cannot run in a browser, so the two measurements the
+                        surrogate needs are asked for rather than invented. This is also
+                        how the measurements are obtained clinically — a radiologist sizes
+                        the dome and neck off the scan. Given them, every quantity except
+                        OSI and ECAP is available in under a millisecond.
+                    -->
+                    <div class="sim-morphology-card hidden" id="morphology-prompt">
+                        <div class="terminal-header">
+                            <span class="terminal-tag"><i class="fa-solid fa-ruler"></i> SAC MEASUREMENTS REQUIRED</span>
+                        </div>
+                        <div class="morph-body">
+                            <p class="morph-note">
+                                No CFD run exists for this patient. Enter the measured sac
+                                dimensions and the hemodynamics will be estimated instantly
+                                from <strong id="morph-npoints">the</strong> full OpenFOAM
+                                solutions this surrogate was fitted to.
+                            </p>
+                            <div class="morph-fields">
+                                <label>Dome diameter
+                                    <span class="morph-input-wrap">
+                                        <input type="number" id="morph-dome" step="0.1" min="0.5" max="40" value="7.0">
+                                        <span class="morph-unit">mm</span>
+                                    </span>
+                                </label>
+                                <label>Neck diameter
+                                    <span class="morph-input-wrap">
+                                        <input type="number" id="morph-neck" step="0.1" min="0.5" max="40" value="5.0">
+                                        <span class="morph-unit">mm</span>
+                                    </span>
+                                </label>
+                            </div>
+                            <button class="btn-primary morph-go" id="morph-compute">
+                                <i class="fa-solid fa-bolt"></i> Estimate hemodynamics
+                            </button>
+                            <p class="morph-caveat">
+                                OSI and ECAP are <strong>not</strong> estimated — they are
+                                defined over a cardiac cycle and cannot be obtained from
+                                geometry. Those require a full transient solve (hours).
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Bottom: Flow Steps indicator -->
@@ -761,6 +807,9 @@
     <!-- Real binary DICOM parsing for the upload flow. Must load BEFORE app.js,
          which calls window.NeuroDicom.parse() on the dropped file. -->
     <script src="dicom.js"></script>
+    <!-- Evaluates the response surface fitted to the OpenFOAM sweep. Must load
+         before app.js, which calls window.NeuroSurrogate on upload. -->
+    <script src="surrogate.js"></script>
     <script src="app.js"></script>
 </body>
 
