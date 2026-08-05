@@ -246,6 +246,37 @@ if (cards.length) {
           `${inRing} note(s) inside .radial-progress-container`);
 }
 
+// --- the upload must not hide its own form ---------------------------------
+//
+// The sac-measurement form lives INSIDE the simulation modal. The modal used to
+// be closed unconditionally at the end of the scripted animation, before the
+// form was shown — so for a patient with no solved case the form had its
+// `hidden` class removed on an element inside an already-hidden container.
+// Invisible, unclickable, never confirmed, so the upload added nothing to the
+// profile list and appeared to do nothing at all.
+//
+// Asserted structurally rather than by driving the whole upload: the animation
+// runs for ~40 s of scripted sleeps, which does not belong in CI.
+{
+    const app = readFileSync(resolve(ROOT, "app.js"), "utf8");
+    const body = app.split("async function runCfdSimulation")[1] || "";
+
+    check("upload flow declares whether a measurement form is needed",
+          /needsMeasurement/.test(body));
+
+    // The close inside runCfdSimulation must be guarded.
+    const closeIdx = body.indexOf('simulationModalEl.classList.add("hidden")');
+    check("modal close in the upload flow is conditional", closeIdx > -1
+          && /if \(!needsMeasurement\)\s*\{\s*$/m.test(body.slice(Math.max(0, closeIdx - 120), closeIdx)),
+          "the modal is closed unconditionally — the measurement form would be invisible");
+
+    // ...and the form's submit handler must close it, or the modal is stranded.
+    const onGo = app.split("const onGo = ")[1] || "";
+    check("submitting the measurement form closes the modal",
+          /simulation-modal/.test(onGo.slice(0, 600)),
+          "nothing closes the modal after the form is used");
+}
+
 // --- DICOM parsing --------------------------------------------------------
 //
 // The upload handler used to read files with readAsText() and regex out

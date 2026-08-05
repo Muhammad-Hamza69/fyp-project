@@ -40,7 +40,8 @@ services/worker
 # from the actual solved surface. Kept in git history, not shipped.
 NervesOnly_v1.glb
 
-# Local test scans for exercising the upload control. Deliberately NOT
-# served: they exist to be uploaded BY a user, so they must not already
-# be sitting on the site.
-test-uploads
+# Test scans for the upload control. Served so they can be DOWNLOADED and then
+# uploaded back through the UI. They are static files only — not registered as
+# patient cases, so the dashboard still treats them as unknown patients and
+# exercises the full measure-and-estimate path.
+!test-uploads/*.dcm

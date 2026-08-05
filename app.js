@@ -785,6 +785,9 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
         const neckEl = document.getElementById("morph-neck");
         const btn = document.getElementById("morph-compute");
         if (!card || !btn || !window.NeuroSurrogate) {
+            // No form to show, so nothing is waiting on the modal.
+            const modal = document.getElementById("simulation-modal");
+            if (modal) modal.classList.add("hidden");
             registerUnsolvedCase(patientId, dicomMeta);
             resolve();
             return;
@@ -811,6 +814,10 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
         }).catch((err) => {
             writeTerminalLog(`[ERROR] Surrogate unavailable: ${err.message}`, "error");
             writeTerminalLog("[INFO] Hemodynamics will show as not computed.", "info");
+            // Nothing left to show in the modal, and leaving it open would trap
+            // the user behind an overlay with no way forward.
+            const modal = document.getElementById("simulation-modal");
+            if (modal) modal.classList.add("hidden");
             registerUnsolvedCase(patientId, dicomMeta);
             resolve();
         });
@@ -818,6 +825,10 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
         const onGo = () => {
             btn.removeEventListener("click", onGo);
             card.classList.add("hidden");
+            // The modal was deliberately left open so this form could be seen
+            // and used; now that it has been, close it and reveal the dashboard.
+            const modal = document.getElementById("simulation-modal");
+            if (modal) modal.classList.add("hidden");
 
             const dome = parseFloat(domeEl.value);
             const neck = parseFloat(neckEl.value);
@@ -1685,7 +1696,13 @@ async function runCfdSimulation(fileObject) {
     const manufacturer = t.manufacturer || null;
     const bodyPart = t.bodyPartExamined || null;
     const seriesDesc = t.seriesDescription || t.protocolName || null;
-    const pathology = bodyPart ? `${bodyPart} vasculature` : "Cerebral vasculature";
+    // `let`, not `const`: the legacy tail of this function reassigns it from
+    // window.currentIngestedPathology. Declaring it const threw
+    // "Assignment to constant variable" partway through the upload, which
+    // aborted the run before the measurement form appeared and before the
+    // patient was ever added to the profile list — the upload simply did
+    // nothing, with no visible error.
+    let pathology = bodyPart ? `${bodyPart} vasculature` : "Cerebral vasculature";
 
     // A single file is one slice. Claiming a series count from it would be a
     // guess, and the old code guessed 142 every time.
@@ -2038,8 +2055,20 @@ async function runCfdSimulation(fileObject) {
     writeTerminalLog("[READY] Redirecting to Clinical Insights Dashboard...", "success");
     await sleep(1000);
 
-    // Close modal, success completion
-    simulationModalEl.classList.add("hidden");
+    // Close the modal ONLY when nothing further needs it.
+    //
+    // The sac-measurement form lives inside this modal. Closing here
+    // unconditionally meant that, for a patient with no solved case, the form
+    // had its `hidden` class removed on an element inside an already-hidden
+    // container: invisible, unclickable, and therefore never confirmed — so the
+    // upload silently added nothing to the profile list. The flow appeared to
+    // do nothing at all.
+    const needsMeasurement = !patientDatabase[
+        window.currentIngestedPatientId || patientId
+    ];
+    if (!needsMeasurement) {
+        simulationModalEl.classList.add("hidden");
+    }
 
     patientId = window.currentIngestedPatientId || "PT-2025-0061";
     pathology = window.currentIngestedPathology || "Cerebral Vasculature";
