@@ -66,6 +66,62 @@
         return await new Response(stream).arrayBuffer();
     }
 
+    // ------------------------------------------------ clinical annotation --
+
+    /**
+     * Clinical history carried in a format's free-text field.
+     *
+     * STL, NIfTI and Fluent have no clinical vocabulary — DICOM does, which is
+     * why it needs none of this. But each has one designated free-text slot:
+     *
+     *   STL      the 80-byte binary header, conventionally a comment and
+     *            ignored by every geometry reader
+     *   NIfTI    `descrip` at offset 148, a standard 80-byte description field
+     *   Fluent   a `(0 "…")` comment section
+     *
+     * A compact line is written there and read back:
+     *
+     *   NEUROFLOW/1 A=64 H=1 S=0 P=Other L=MCA
+     *
+     * This is a CONVENTION, not a standard. A file from elsewhere will not have
+     * it, and those still report PHASES as unscored rather than inventing the
+     * history — which is the behaviour that matters. It exists so that a
+     * pipeline exporting a surface can carry the case's history with it instead
+     * of losing it at the format boundary.
+     */
+    const ANNOT_RE = /NEUROFLOW\/1\s+([^\r\n\0]*)/;
+
+    function parseAnnotation(text) {
+        if (!text) return null;
+        const m = ANNOT_RE.exec(String(text));
+        if (!m) return null;
+
+        const kv = {};
+        for (const tok of m[1].trim().split(/\s+/)) {
+            const i = tok.indexOf("=");
+            // Trim the delimiters a container may append: inside a Fluent
+            // comment the last token arrives as `L=MCA")`, which would
+            // otherwise fail the site whitelist and silently drop it.
+            if (i > 0) {
+                kv[tok.slice(0, i).toUpperCase()] =
+                    tok.slice(i + 1).replace(/["')\]\s]+$/, "");
+            }
+        }
+        // A key that is absent stays null. "0" and "missing" are different
+        // answers, and collapsing them is what scores an unknown as a negative.
+        const bool = (v) => (v === undefined ? null : v === "1" || /^(y|yes|true)$/i.test(v));
+        const age = kv.A !== undefined ? parseInt(kv.A, 10) : null;
+        const site = kv.L ? kv.L.toUpperCase() : null;
+        return {
+            age: Number.isFinite(age) ? age : null,
+            hypertension: bool(kv.H),
+            earlierSAH: bool(kv.S),
+            population: kv.P || null,
+            site: ["ICA", "MCA", "ACOM_PCOM_POST"].includes(site) ? site : null,
+            source: "file annotation",
+        };
+    }
+
     // ---------------------------------------------------------------- STL --
 
     function readStl(buffer) {
@@ -80,6 +136,13 @@
         if (n >= 84) {
             const tris = view.getUint32(80, true);
             binary = (84 + tris * 50) === n;
+        }
+
+        // The 80-byte header carries the annotation when there is one.
+        let headerText = "";
+        for (let i = 0; i < Math.min(80, n); i++) {
+            const ch = view.getUint8(i);
+            if (ch >= 32 && ch < 127) headerText += String.fromCharCode(ch);
         }
 
         const pts = [];
@@ -107,7 +170,7 @@
         if (pts.length < 12) {
             return { ok: false, reason: "no triangles found — the file may be truncated or not STL" };
         }
-        return { ok: true, points: pts, binary, triangles: pts.length / 3 };
+        return { ok: true, points: pts, binary, triangles: pts.length / 3, headerText };
     }
 
     // -------------------------------------------------------------- Fluent --
@@ -119,6 +182,8 @@
         // cells and boundary conditions are all skipped.
         const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
         const pts = [];
+        // (0 "…") comment sections, where an annotation would live.
+        const comments = (text.match(/\(\s*0\s+"([^"]*)"/g) || []).join(" ");
 
         const re = /\(\s*10\s*\(([^)]*)\)\s*\(/g;
         let m;
@@ -150,7 +215,7 @@
                       + "some writer versions are not supported.",
             };
         }
-        return { ok: true, points: pts, nodes: pts.length };
+        return { ok: true, points: pts, nodes: pts.length, comments };
     }
 
     // --------------------------------------------------------------- NIfTI --
@@ -206,8 +271,17 @@
             }
         }
 
+        // `descrip` — 80 bytes at offset 148, the standard short-description
+        // field. Read as text so an annotation written there survives.
+        let descrip = "";
+        for (let i = 148; i < 228 && i < buffer.byteLength; i++) {
+            const ch = v.getUint8(i);
+            if (ch === 0) break;
+            if (ch >= 32 && ch < 127) descrip += String.fromCharCode(ch);
+        }
+
         return {
-            ok: true,
+            ok: true, descrip,
             slice, rows: ny, cols: nx,
             spacing: [pixdim[2] || 1, pixdim[1] || 1],     // [row, col] mm
             dims: [nx, ny, nz],
@@ -370,6 +444,7 @@
             // Reuse the DICOM measurement: identical problem, identical method.
             const m = global.NeuroDicom.measureSlice(
                 nii.slice, nii.rows, nii.cols, nii.spacing[0], nii.spacing[1]);
+            const annot = parseAnnotation(nii.descrip);
             return {
                 ok: true, format, label, measurement: m,
                 meta: {
@@ -377,13 +452,14 @@
                     sliceThickness: nii.spacing[0],
                     seriesDescription: `NIfTI volume ${nii.dims.join("x")}`,
                 },
-                clinical: {},          // NIfTI carries no clinical history
+                clinical: annot || {},   // from `descrip`, when annotated
             };
         }
 
         const geom = format === "stl" ? readStl(buf) : readFluentNodes(buf);
         if (!geom.ok) return { ok: false, format, label, reason: geom.reason };
 
+        const annot = parseAnnotation(geom.headerText || geom.comments || "");
         const units = inferUnitScale(geom.points);
         const m = measureFromPoints(geom.points, units.scale);
         if (m.ok) {
@@ -400,12 +476,12 @@
                     : `Fluent case, ${geom.nodes} nodes`,
                 unitsAssumed: units.units,
             },
-            clinical: {},              // neither format carries clinical history
+            clinical: annot || {},     // from the header/comment, when annotated
         };
     }
 
     global.NeuroReaders = {
-        read, detect, isGzip, readStl, readNifti, readFluentNodes,
+        read, detect, isGzip, readStl, readNifti, readFluentNodes, parseAnnotation,
         measureFromPoints, inferUnitScale, FORMATS,
     };
 })(typeof window !== "undefined" ? window : globalThis);
