@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import SimpleITK as sitk
@@ -111,8 +112,18 @@ def generate(
     return img, gt
 
 
+# Wording a radiology order would actually use, so the parser matches on
+# clinical language rather than on our own internal enum.
+SITE_TERMS = {
+    "ICA": "internal carotid artery",
+    "MCA": "middle cerebral artery",
+    "ACOM_PCOM_POST": "anterior communicating artery",
+}
+
+
 def write_dicom_series(
-    img: sitk.Image, out_dir: Path, patient_id: str, series_desc: str = "TOF MRA BRAIN"
+    img: sitk.Image, out_dir: Path, patient_id: str, series_desc: str = "TOF MRA BRAIN",
+    clinical: dict[str, Any] | None = None,
 ) -> list[Path]:
     """
     Write a genuine, standards-compliant multi-slice DICOM series.
@@ -127,6 +138,7 @@ def write_dicom_series(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    c = clinical or {}
     arr = sitk.GetArrayFromImage(img).astype(np.uint16)
     sx, sy, sz = img.GetSpacing()
     study_uid, series_uid = generate_uid(), generate_uid()
@@ -152,7 +164,39 @@ def write_dicom_series(
 
         ds.PatientID = patient_id
         ds.PatientName = "ANONYMISED^PHANTOM"
-        ds.PatientSex = "O"
+        ds.PatientSex = c.get("sex", "O")
+
+        # --- clinical history, in the standard tags that carry it -----------
+        #
+        # PHASES needs age, hypertension, prior SAH, population and aneurysm
+        # site. DICOM has real places for all of them, and a scan that reaches a
+        # reporting workstation normally carries them because they came in on
+        # the order. Writing them here means the dashboard reads the history
+        # from the FILE rather than defaulting it — defaulting hypertension to
+        # "No" scores it zero and manufactures a low rupture risk out of nothing.
+        #
+        #   (0010,1010) PatientAge                     "064Y"
+        #   (0010,2160) EthnicGroup                    population term
+        #   (0010,21B0) AdditionalPatientHistory       free text, parsed for
+        #                                              hypertension / prior SAH
+        #   (0008,1080) AdmittingDiagnosesDescription  names the vessel
+        if c.get("age"):
+            ds.PatientAge = f"{int(c['age']):03d}Y"
+        if c.get("population"):
+            ds.EthnicGroup = str(c["population"])
+
+        history = []
+        if c.get("hypertension") is not None:
+            history.append("HYPERTENSION" if c["hypertension"] else "NO HYPERTENSION")
+        if c.get("earlier_sah") is not None:
+            history.append("PRIOR SAH" if c["earlier_sah"] else "NO PRIOR SAH")
+        if history:
+            ds.AdditionalPatientHistory = "; ".join(history)
+
+        if c.get("site"):
+            ds.AdmittingDiagnosesDescription = (
+                f"Unruptured intracranial aneurysm, {SITE_TERMS.get(c['site'], c['site'])}"
+            )
         ds.StudyDate = now.strftime("%Y%m%d")
         ds.StudyTime = now.strftime("%H%M%S")
         ds.Modality = "MR"

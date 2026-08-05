@@ -22,7 +22,10 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
  * Scaled to keep the stages legible while getting out of the way. Set to 0 for
  * an instant run.
  */
-const PIPELINE_SPEED = 0.06;
+// Restored to full length at the project owner's request: the six stages are
+// the demonstration's showpiece. The work itself is still milliseconds; this
+// paces the visualisation, nothing else.
+const PIPELINE_SPEED = 1.0;
 const animSleep = ms => sleep(Math.round(ms * PIPELINE_SPEED));
 
 // Helper: Linear Interpolation for numbers
@@ -960,10 +963,12 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                     + "to calibrate them.", "info");
             }
 
-            // DICOM PatientAge is "045Y" / "045M" / "045D"; only years are useful here.
-        const rawAge = (dicomMeta && dicomMeta.patientAge) || "";
-        const mAge = /^(\d{1,3})Y?$/.exec(String(rawAge).trim());
-        const dicomAge = mAge ? parseInt(mAge[1], 10) : null;
+            // Clinical history, read from the scan's own header — PatientAge,
+        // EthnicGroup, AdditionalPatientHistory and AdmittingDiagnoses. Fields
+        // the file does not carry stay null, so PHASES reports them missing
+        // rather than scoring an unknown as a negative.
+        const clinical = (window.NeuroDicom && window.NeuroDicom.clinicalHistory)
+            ? window.NeuroDicom.clinicalHistory(dicomMeta || {}) : {};
 
         const ar = +(dome / Math.max(neck, 0.1)).toFixed(2);
             patientDatabase[patientId] = {
@@ -985,11 +990,11 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                 // Everything else is clinical history no image contains, so it
                 // stays null and PHASES reports itself unavailable.
                 demographics: {
-                    age: dicomAge,
-                    hypertension: null,
-                    earlierSAH: null,
-                    population: null,
-                    site: null,
+                    age: clinical.age,
+                    hypertension: clinical.hypertension,
+                    earlierSAH: clinical.earlierSAH,
+                    population: clinical.population,
+                    site: clinical.site,
                 },
                 zones: window.NeuroSurrogate.toZones(p),
                 hemodynamics: {
@@ -2238,10 +2243,13 @@ async function runCfdSimulation(fileObject) {
             }
         }
 
+        // Pass the parsed tags through wholesale: the clinical-history reader
+        // needs several of them, and hand-picking a subset here is how
+        // PatientAge came to be the only one that survived.
         await promptMorphologyAndEstimate(patientId, {
+            ...t,
             modality, studyDate, rows, columns, sliceThickness,
             manufacturer, bodyPart, seriesDescription: seriesDesc, fileName,
-            patientAge: t.patientAge || null,
         }, measured);
         return;
     }

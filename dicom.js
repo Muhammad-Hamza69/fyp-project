@@ -39,6 +39,12 @@
         "0010,0020": "patientID",
         "0010,0040": "patientSex",
         "0010,1010": "patientAge",
+        // Clinical history for the PHASES score. These are the standard places
+        // a scan carries it — none of it is derivable from the pixels, and
+        // defaulting it instead would score unknowns as zero.
+        "0010,2160": "ethnicGroup",                 // population term
+        "0010,21B0": "additionalPatientHistory",    // hypertension / prior SAH
+        "0008,1080": "admittingDiagnoses",          // names the parent vessel
         "0018,0015": "bodyPartExamined",
         "0018,0050": "sliceThickness",
         "0018,0088": "spacingBetweenSlices",
@@ -529,5 +535,60 @@
         };
     }
 
-    global.NeuroDicom = { parse, pixels, measureSac, TAGS };
+    /**
+     * Clinical history for PHASES, read from the header.
+     *
+     * Everything here comes from the FILE. A field the scan does not carry is
+     * returned as null, not as a default — "not known" and "No" score
+     * differently, and treating the first as the second invents a low-risk
+     * patient out of an absent record.
+     *
+     * The history and diagnosis fields are free text, so they are matched on
+     * clinical wording rather than an exact code. Negation is checked FIRST:
+     * "NO HYPERTENSION" contains "hypertension".
+     */
+    function clinicalHistory(tags) {
+        if (!tags) return {};
+        const hist = String(tags.additionalPatientHistory || "").toUpperCase();
+        const diag = String(tags.admittingDiagnoses || "").toUpperCase();
+        const both = `${hist} ${diag}`;
+
+        // "045Y" | "045M" | "045D" — only years are meaningful for PHASES.
+        let age = null;
+        const mAge = /^(\d{1,3})\s*Y?$/.exec(String(tags.patientAge || "").trim());
+        if (mAge) age = parseInt(mAge[1], 10);
+
+        const yesNo = (positive, negative) => {
+            if (negative.test(both)) return false;
+            if (positive.test(both)) return true;
+            return null;
+        };
+
+        const pop = String(tags.ethnicGroup || "").trim().toLowerCase();
+        const population = pop.startsWith("japan") ? "Japanese"
+                         : pop.startsWith("finn") ? "Finnish"
+                         : pop ? "Other" : null;
+
+        // PHASES groups ACOM, PCOM and the posterior circulation together.
+        let site = null;
+        if (/ANTERIOR COMMUNICATING|ACOM|POSTERIOR COMMUNICATING|PCOM|BASILAR|VERTEBRAL|POSTERIOR CIRCULATION/.test(both)) {
+            site = "ACOM_PCOM_POST";
+        } else if (/MIDDLE CEREBRAL|MCA/.test(both)) {
+            site = "MCA";
+        } else if (/INTERNAL CAROTID|ICA/.test(both)) {
+            site = "ICA";
+        }
+
+        return {
+            age,
+            hypertension: yesNo(/HYPERTENS/, /NO HYPERTENS|WITHOUT HYPERTENS|DENIES HYPERTENS/),
+            earlierSAH: yesNo(/PRIOR SAH|PREVIOUS SAH|SUBARACHNOID/,
+                              /NO PRIOR SAH|NO PREVIOUS SAH|NO SUBARACHNOID/),
+            population,
+            site,
+            sex: tags.patientSex || null,
+        };
+    }
+
+    global.NeuroDicom = { parse, pixels, measureSac, clinicalHistory, TAGS };
 })(typeof window !== "undefined" ? window : globalThis);
