@@ -2403,3 +2403,32 @@ body {
     color: var(--color-mod-risk);
     border-color: var(--color-mod-risk);
 }
+
+/* Long case names must wrap inside the card, not spill past it.
+   Uploaded files are named after the file — "3D_aneurysm_artery_AHMU1218001"
+   is 30 characters and overflowed a card laid out for "PT-2026-0101". */
+.patient-card {
+    overflow: hidden;
+}
+
+.patient-card-id {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.25;
+}
+
+.card-header {
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.card-header-right {
+    flex: 0 0 auto;
+}
+
+/* Keep the badges legible when the name pushes them down. */
+.patient-card-details {
+    gap: 8px;
+    flex-wrap: wrap;
+}

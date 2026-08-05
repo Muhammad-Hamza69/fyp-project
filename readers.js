@@ -292,29 +292,40 @@
     // --------------------------------------- measuring a sac from a surface --
 
     /**
-     * Dome and neck from a point cloud (STL vertices or Fluent nodes).
+     * Dome and neck from a triangulated surface, by MAXIMUM INSCRIBED SPHERE.
      *
-     * The vessel is a tube with a sac on it, so the parent artery defines a
-     * dominant axis. Points are measured radially from that axis: the parent
-     * wall sits at a roughly constant radius, and the sac is everything
-     * significantly beyond it.
+     * WHY THE PREVIOUS METHOD FAILED
+     * It assumed the model was one straight tube with one sphere on it — which
+     * my phantoms are, and which a real scan is not. It fitted a single axis,
+     * measured every vertex radially from it, and called the outliers "sac".
+     * On a genuine arterial tree, with branches running in many directions at
+     * many calibres, that measures the bounding box: an uploaded cerebral
+     * artery model reported a 176.7 mm dome. No aneurysm is that size — that
+     * is the width of the head.
      *
-     * The parent radius is taken at the 35th percentile, not the median.
-     * A median is pulled upward by the sac's own points and over-estimates the
-     * parent — which then makes the sac look smaller than it is. That exact
-     * mistake, made in the Python pipeline, put a sac's TAWSS out by a factor
-     * of 22,000 before it was caught.
+     * WHAT THIS DOES INSTEAD
+     * An aneurysm is a local DILATION: the vessel is wider there than anywhere
+     * else. So the largest sphere that fits inside the lumen sits in the sac,
+     * and its diameter is the dome diameter. This is the maximum inscribed
+     * sphere — the quantity vessel-morphology tools derive from the medial
+     * axis — and it assumes nothing about how the vessel is laid out.
+     *
+     *   1. voxelise the surface onto a grid
+     *   2. flood-fill from a corner to mark the exterior
+     *   3. interior = neither surface nor exterior
+     *   4. distance transform over the interior
+     *   5. dome   = 2 x the largest distance
+     *      parent = 2 x the ordinary calibre of the rest of the lumen
+     *      neck   = the constriction between the two
+     *
+     * Grid resolution is capped so an arbitrarily large model cannot allocate
+     * an arbitrarily large grid, and the voxel size is reported so the
+     * measurement's granularity is visible rather than implied.
      */
     function measureFromPoints(points, unitScale) {
         const n = points.length;
         if (n < 12) return { ok: false, reason: "too few points to measure" };
 
-        const c = [0, 0, 0];
-        for (const p of points) { c[0] += p[0]; c[1] += p[1]; c[2] += p[2]; }
-        c[0] /= n; c[1] /= n; c[2] /= n;
-
-        // Longest bounding-box side is the vessel axis. Robust here because the
-        // parent artery is far longer than the sac is wide.
         const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
         for (const p of points) {
             for (let d = 0; d < 3; d++) {
@@ -323,61 +334,181 @@
             }
         }
         const span = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
-        const axis = span.indexOf(Math.max(...span));
-        const r1 = (axis + 1) % 3, r2 = (axis + 2) % 3;
+        const longest = Math.max(span[0], span[1], span[2]);
+        if (!(longest > 0)) return { ok: false, reason: "degenerate geometry" };
 
-        const radial = points.map((p) => Math.hypot(p[r1] - c[r1], p[r2] - c[r2]));
-        const sorted = [...radial].sort((a, b) => a - b);
-        const parentR = sorted[Math.floor(sorted.length * 0.35)];
+        // Resolution is set by the FEATURE, not the bounding box.
+        //
+        // A cerebral artery model is ~100 mm long and ~4 mm across. At 160
+        // voxels along the longest axis the lumen is barely 6 voxels wide, the
+        // one-voxel shell consumes most of that, and the inscribed radius comes
+        // out ~37% low — a 4.0 mm vessel measured 2.5 mm. The grid has to
+        // resolve the vessel, not the extent.
+        //
+        // 0.2 mm targets ~20 voxels across a 4 mm artery. The cap keeps memory
+        // bounded for a large model, at the cost of accuracy the caller can see
+        // in `voxelSizeMm`.
+        const TARGET_MM = 0.2;
+        const MAX_VOXELS = 24e6;
+        let h = TARGET_MM / unitScale;               // model units
+        const est = () => (Math.ceil(span[0] / h) + 3) * (Math.ceil(span[1] / h) + 3)
+                        * (Math.ceil(span[2] / h) + 3);
+        while (est() > MAX_VOXELS) h *= 1.25;
+        if (h > longest / 8) h = longest / 8;         // never coarser than 8 cells
+        const nx = Math.max(3, Math.ceil(span[0] / h) + 3);
+        const ny = Math.max(3, Math.ceil(span[1] / h) + 3);
+        const nz = Math.max(3, Math.ceil(span[2] / h) + 3);
+        const total = nx * ny * nz;
+        if (total > MAX_VOXELS * 1.2) return { ok: false, reason: "model too large to voxelise" };
 
-        // Everything well outside the parent wall is sac.
-        const sac = [];
-        for (let i = 0; i < n; i++) {
-            if (radial[i] > parentR * 1.5) sac.push(points[i]);
+        const idx = (i, j, k) => i + nx * (j + ny * k);
+        const SURF = 1, OUT = 2;
+        const grid = new Uint8Array(total);
+
+        // 1. Mark the shell. Vertices alone suffice: a scan-derived surface is
+        //    finely triangulated relative to this grid, so the shell closes.
+        for (const p of points) {
+            const i = Math.min(nx - 1, Math.max(0, Math.round((p[0] - lo[0]) / h) + 1));
+            const j = Math.min(ny - 1, Math.max(0, Math.round((p[1] - lo[1]) / h) + 1));
+            const k = Math.min(nz - 1, Math.max(0, Math.round((p[2] - lo[2]) / h) + 1));
+            grid[idx(i, j, k)] = SURF;
         }
-        if (sac.length < 8) {
-            return {
-                ok: true, bulgeDetected: false,
-                parentDiameterMm: parentR * 2 * unitScale,
-                domeDiameterMm: 0, neckDiameterMm: 0,
+
+        // 2. Flood-fill the exterior from the padded corner.
+        const stack = new Int32Array(total);
+        let sp = 0;
+        stack[sp++] = idx(0, 0, 0);
+        grid[idx(0, 0, 0)] = OUT;
+        while (sp > 0) {
+            const cur = stack[--sp];
+            const k = (cur / (nx * ny)) | 0;
+            const rem = cur - k * nx * ny;
+            const j = (rem / nx) | 0;
+            const i = rem - j * nx;
+            const push = (a, b, c) => {
+                if (a < 0 || b < 0 || c < 0 || a >= nx || b >= ny || c >= nz) return;
+                const t = idx(a, b, c);
+                if (grid[t] === 0) { grid[t] = OUT; stack[sp++] = t; }
             };
+            push(i - 1, j, k); push(i + 1, j, k);
+            push(i, j - 1, k); push(i, j + 1, k);
+            push(i, j, k - 1); push(i, j, k + 1);
         }
 
-        const slo = [Infinity, Infinity, Infinity], shi = [-Infinity, -Infinity, -Infinity];
-        for (const p of sac) {
-            for (let d = 0; d < 3; d++) {
-                if (p[d] < slo[d]) slo[d] = p[d];
-                if (p[d] > shi[d]) shi[d] = p[d];
+        // 3+4. Chamfer distance transform over the interior, in voxels. Two
+        //      sweeps approximate Euclidean distance closely enough for a
+        //      radius at a fraction of the cost of an exact transform.
+        const INF = 1e9;
+        const dist = new Float32Array(total);
+        let interior = 0;
+        for (let t = 0; t < total; t++) {
+            if (grid[t] === 0) { dist[t] = INF; interior++; } else dist[t] = 0;
+        }
+        if (interior < 20) {
+            return { ok: false, reason: "no enclosed lumen found — the surface may be open" };
+        }
+
+        // (1, sqrt2, sqrt3) chamfer. Omitting the body diagonal underestimates
+        // Euclidean distance by up to ~13% in 3D — measured directly as a
+        // 6.55 mm dome on a sphere known to be 7.5 mm.
+        const D1 = 1, D2 = Math.SQRT2, D3 = Math.sqrt(3);
+        const relax = (t, u, w) => { const d = dist[u] + w; if (d < dist[t]) dist[t] = d; };
+        for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+            const t = idx(i, j, k);
+            if (dist[t] === 0) continue;
+            if (i > 0) relax(t, idx(i - 1, j, k), D1);
+            if (j > 0) relax(t, idx(i, j - 1, k), D1);
+            if (k > 0) relax(t, idx(i, j, k - 1), D1);
+            if (i > 0 && j > 0) relax(t, idx(i - 1, j - 1, k), D2);
+            if (i > 0 && k > 0) relax(t, idx(i - 1, j, k - 1), D2);
+            if (j > 0 && k > 0) relax(t, idx(i, j - 1, k - 1), D2);
+            if (i > 0 && j > 0 && k > 0) relax(t, idx(i - 1, j - 1, k - 1), D3);
+        }
+        for (let k = nz - 1; k >= 0; k--) for (let j = ny - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) {
+            const t = idx(i, j, k);
+            if (dist[t] === 0) continue;
+            if (i < nx - 1) relax(t, idx(i + 1, j, k), D1);
+            if (j < ny - 1) relax(t, idx(i, j + 1, k), D1);
+            if (k < nz - 1) relax(t, idx(i, j, k + 1), D1);
+            if (i < nx - 1 && j < ny - 1) relax(t, idx(i + 1, j + 1, k), D2);
+            if (i < nx - 1 && k < nz - 1) relax(t, idx(i + 1, j, k + 1), D2);
+            if (j < ny - 1 && k < nz - 1) relax(t, idx(i, j + 1, k + 1), D2);
+            if (i < nx - 1 && j < ny - 1 && k < nz - 1) relax(t, idx(i + 1, j + 1, k + 1), D3);
+        }
+
+        // 5. Radii, converted to millimetres.
+        const radii = [];
+        let maxR = 0;
+        for (let t = 0; t < total; t++) {
+            if (grid[t] !== 0) continue;
+            const d = dist[t];
+            if (d >= INF) continue;
+            radii.push(d);
+            if (d > maxR) maxR = d;
+        }
+        if (!radii.length) return { ok: false, reason: "no interior voxels" };
+        radii.sort((a, b) => a - b);
+
+        const toMm = h * unitScale;
+        const domeMm = 2 * maxR * toMm;
+
+        // Parent calibre from voxels ON the medial axis — those that are local
+        // maxima of the distance field, i.e. no neighbour is further from the
+        // wall. In a tube of radius R only the centreline reaches R; every
+        // other interior voxel is nearer the wall, so a percentile over ALL of
+        // them measures how the lumen is filled rather than how wide it is.
+        // That reported 2.5 mm for a vessel known to be 4.0 mm across.
+        const ridge = [];
+        for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+            const t = idx(i, j, k);
+            if (grid[t] !== 0) continue;
+            const d = dist[t];
+            if (d >= INF || d < 1) continue;
+            if (d >= dist[idx(i - 1, j, k)] && d >= dist[idx(i + 1, j, k)] &&
+                d >= dist[idx(i, j - 1, k)] && d >= dist[idx(i, j + 1, k)] &&
+                d >= dist[idx(i, j, k - 1)] && d >= dist[idx(i, j, k + 1)]) {
+                ridge.push(d);
             }
         }
-        const sacSpan = [shi[0] - slo[0], shi[1] - slo[1], shi[2] - slo[2]];
-        const domeMm = Math.max(...sacSpan) * unitScale;
+        ridge.sort((a, b) => a - b);
+        // 75th percentile of the medial axis, not the median. Ridge points
+        // cluster wherever the vessel tapers — near caps, bifurcations and the
+        // sac junction — and those thin points outnumber the full-calibre run,
+        // pulling a median 30% below the true diameter. The sac's own ridge
+        // points are few enough not to dominate p75.
+        const parentMm = ridge.length
+            ? 2 * ridge[Math.floor(ridge.length * 0.75)] * toMm
+            : 2 * radii[Math.floor(radii.length * 0.95)] * toMm;
 
-        // Neck: the sac's width where it meets the parent wall, taken as its
-        // extent along the vessel axis at the innermost band of sac points.
-        const inner = sac.filter((p) => {
-            const rr = Math.hypot(p[r1] - c[r1], p[r2] - c[r2]);
-            return rr < parentR * 2.0;
+        // A dilation only counts as a sac if it is meaningfully wider than the
+        // vessel carrying it. Otherwise this is a healthy tree, and saying so
+        // beats reporting its widest point as an aneurysm.
+        const ratio = parentMm > 0 ? domeMm / parentMm : 0;
+
+        const between = radii.filter((r) => {
+            const d = 2 * r * toMm;
+            return d > parentMm && d < domeMm;
         });
-        let neckMm = domeMm * 0.75;
-        if (inner.length >= 4) {
-            let a = Infinity, b = -Infinity;
-            for (const p of inner) { if (p[axis] < a) a = p[axis]; if (p[axis] > b) b = p[axis]; }
-            neckMm = Math.min((b - a) * unitScale, domeMm);
-        }
+        const neckRaw = between.length
+            ? 2 * between[Math.floor(between.length * 0.25)] * toMm
+            : Math.max(parentMm, domeMm * 0.6);
+        const neckMm = Math.min(neckRaw, domeMm);
 
         return {
             ok: true,
-            bulgeDetected: true,
+            bulgeDetected: ratio >= 1.4,
             domeDiameterMm: +domeMm.toFixed(2),
-            neckDiameterMm: +Math.max(neckMm, 0.1).toFixed(2),
-            parentDiameterMm: +(parentR * 2 * unitScale).toFixed(2),
+            neckDiameterMm: +neckMm.toFixed(2),
+            parentDiameterMm: +parentMm.toFixed(2),
             aspectRatio: +(domeMm / Math.max(neckMm, 0.1)).toFixed(2),
-            sacPoints: sac.length,
-            method: "radial profile about the vessel axis (parent radius at p35)",
-            caveat: "Measured from the supplied surface. No thresholding is involved, "
-                  + "so this is more direct than the image-based route — but the file "
-                  + "must contain the vessel and the sac and nothing else.",
+            dilationRatio: +ratio.toFixed(2),
+            voxelSizeMm: +toMm.toFixed(3),
+            interiorVoxels: interior,
+            method: "maximum inscribed sphere on a voxelised lumen",
+            caveat: "Measured from the supplied surface, no thresholding. The dome is "
+                  + "the largest sphere fitting inside the lumen. The neck is "
+                  + "approximate and the sac is not separated from the parent vessel "
+                  + "anatomically — confirm before relying on it.",
         };
     }
 
