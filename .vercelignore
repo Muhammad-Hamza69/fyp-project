@@ -39,3 +39,8 @@ services/worker
 # patient's vasculature. Replaced by per-case models/{id}.glb (~1 MB) exported
 # from the actual solved surface. Kept in git history, not shipped.
 NervesOnly_v1.glb
+
+# Local test scans for exercising the upload control. Deliberately NOT
+# served: they exist to be uploaded BY a user, so they must not already
+# be sitting on the site.
+test-uploads
