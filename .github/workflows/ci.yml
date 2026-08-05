@@ -53,9 +53,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
       # Loads index.html + app.js in a real DOM, renders every case and clicks
       # every control.
@@ -67,7 +70,13 @@ jobs:
       # because all of them were Python or string greps: nothing executed the
       # page. Gauges that never ran kept their previous markup, so the failure
       # showed up as a confident "0.00" rather than an error.
-      - run: npm install --no-save jsdom
+      # pnpm with the lockfile, like every other job. An ad-hoc
+      # `npm install --no-save jsdom` here installed an unpinned version and
+      # left the root package.json declaring a dependency the lockfile did not
+      # carry — which is what broke `pnpm install --frozen-lockfile` in the
+      # TypeScript job while this one stayed green.
+      - run: pnpm install --frozen-lockfile
+
       - name: smoke test
         run: node tests/dashboard.smoke.mjs
 
