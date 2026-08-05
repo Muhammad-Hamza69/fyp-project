@@ -27,6 +27,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+# NOT named `queue`: services/api is on sys.path, so a module by that
+# name shadows Python's stdlib `queue` for everything in this process —
+# including Celery's amqp layer, which does `from queue import Queue`.
+# That import failure took the worker down entirely.
+import jobqueue                                  # noqa: E402
 from auth import Principal, auth_status, current_principal, require_write, tenant_filter
 from db import get_session, init_db
 from models import (
@@ -135,6 +140,7 @@ def health(s: Session = Depends(db)) -> dict[str, Any]:
         "version": API_VERSION,
         "database": database,
         "auth": auth_status(),
+        "queue": jobqueue.status(),
         "time": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -283,7 +289,23 @@ def create_run(
                   JobState.REPORTING):
         s.add(JobStage(run_id=r.run_id, stage=stage, state="pending"))
     s.commit()
-    return {"run_id": r.run_id, "run_version": r.run_version, "state": r.state.value}
+
+    # Hand the work to the queue.
+    #
+    # Until now this endpoint created the run row and its stages and then
+    # stopped — nothing ever dispatched the job, so every run sat at QUEUED for
+    # ever. The state machine, the stage rows and the worker tasks all existed;
+    # the one missing link was this call.
+    #
+    # A broker that is down does NOT fail the request. The run record is valid
+    # and worth keeping so it can be retried; the response says `queued: false`
+    # and why, which is a diagnosable state rather than a silent one.
+    case_dir = os.environ.get("FOAM_CASE_ROOT", "~/cases") + f"/{st.study_id}"
+    dispatch = jobqueue.enqueue_run(r.run_id, case_dir,
+                                 int(os.environ.get("FOAM_NPROC", "6")))
+
+    return {"run_id": r.run_id, "run_version": r.run_version,
+            "state": r.state.value, "dispatch": dispatch}
 
 
 @app.get("/api/v1/runs/{run_id}", tags=["runs"])
