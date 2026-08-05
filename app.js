@@ -131,6 +131,19 @@ function setGaugeNote(valueEl, text) {
     note.textContent = text;
 }
 
+/**
+ * Has a CFD solve produced hemodynamics for this case at all?
+ *
+ * An uploaded scan with no completed run has zeros in its zones — there is
+ * nothing else to put there. Rendering those zeros would show TAWSS 0.00 Pa
+ * and fire the "Low TAWSS (< 0.4 Pa)" alert on a case that was never solved:
+ * a critical finding manufactured out of absent data. Every hemodynamic gauge
+ * checks this before displaying a number.
+ */
+function cfdIsComputed(patient) {
+    return !(patient && patient.awaitingCfd);
+}
+
 function hemodynamicsAreTransient(patient) {
     const h = patient && patient.hemodynamics;
     return !h || h.transient !== false;
@@ -794,6 +807,15 @@ function drawHeatmap() {
 
 // 5. Radial Progress Telemetry Controllers
 function updateRadialGauges() {
+    // Declared FIRST because the TAWSS gauge below reads it, and `const`
+    // has a temporal dead zone — declaring it further down (next to the OSI
+    // gauge that also uses it) threw "Cannot access 'cfdOk' before
+    // initialization" and took out the render exactly as the earlier
+    // `patient`/`activePatient` slip did.
+    //
+    // No solve at all -> nothing hemodynamic is defined, not even TAWSS.
+    const cfdOk = cfdIsComputed(activePatient);
+
     // 1. Composite Risk Index Gauge (Needle rotation + colors)
     const breakdown = computeRiskBreakdown(activePatient);
     const score = breakdown.composite;
@@ -855,7 +877,9 @@ function updateRadialGauges() {
     // 2. TAWSS Gauge (Dome value)
     const domeZone = activePatient.zones.find(z => z.name === "Aneurysm Dome");
     const tawssVal = domeZone.tawss;
-    tawssGaugeValEl.textContent = tawssVal.toFixed(2);
+    tawssGaugeValEl.textContent = cfdOk ? tawssVal.toFixed(2) : "n/a";
+    tawssGaugeValEl.classList.toggle("gauge-not-computed", !cfdOk);
+    setGaugeNote(tawssGaugeValEl, cfdOk ? "" : "no CFD solve for this case");
 
     // Map TAWSS progress ring: Max TAWSS range 2.0 Pa
     const progressCircumference = 2 * Math.PI * 32; // Radius 32 -> Circumference = 201.06
@@ -864,7 +888,10 @@ function updateRadialGauges() {
     tawssProgressFill.style.strokeDashoffset = progressCircumference - (tawssFactor * progressCircumference);
 
     // TAWSS Threshold alert check (< 0.4 Pa)
-    if (tawssVal < 0.4) {
+    // An uncomputed TAWSS must not trip the low-shear alert. Zero is what an
+    // unsolved case stores, and 0.00 Pa is the most alarming value on this
+    // scale — the alert would be manufactured entirely out of absent data.
+    if (cfdOk && tawssVal < 0.4) {
         tawssProgressFill.style.stroke = "var(--color-high-risk)";
         tawssAlertEl.classList.remove("hidden");
     } else {
@@ -891,7 +918,7 @@ function updateRadialGauges() {
     // and finally the click handlers bound after it. One typo took out half
     // the dashboard, and every gauge past this line silently kept its last
     // value — which read as "computed 0.00" rather than "never ran".
-    const osiComputed = hemodynamicsAreTransient(activePatient);
+    const osiComputed = cfdOk && hemodynamicsAreTransient(activePatient);
     const osiVal = domeZone.osi;
     osiGaugeValEl.textContent = osiComputed ? osiVal.toFixed(2) : "n/a";
     osiGaugeValEl.classList.toggle("gauge-not-computed", !osiComputed);
@@ -915,7 +942,9 @@ function updateRadialGauges() {
 
     // 4. RRT Gauge (Dome value) - Relative Residence Time
     const rrtVal = computeRRT(domeZone);
-    rrtGaugeValEl.textContent = rrtVal.toFixed(2);
+    rrtGaugeValEl.textContent = cfdOk ? rrtVal.toFixed(2) : "n/a";
+    rrtGaugeValEl.classList.toggle("gauge-not-computed", !cfdOk);
+    setGaugeNote(rrtGaugeValEl, cfdOk ? "" : "no CFD solve for this case");
 
     // Map RRT progress ring: display range 0-10 Pa^-1 (values beyond just cap the ring)
     rrtProgressFill.style.strokeDasharray = progressCircumference;
@@ -923,7 +952,7 @@ function updateRadialGauges() {
     rrtProgressFill.style.strokeDashoffset = progressCircumference - (rrtFactor * progressCircumference);
 
     // RRT Threshold alert check (> 3.0 Pa^-1)
-    if (rrtVal > 3.0) {
+    if (cfdOk && rrtVal > 3.0) {
         rrtProgressFill.style.stroke = "var(--color-high-risk)";
         rrtAlertEl.classList.remove("hidden");
     } else {
@@ -1293,63 +1322,66 @@ async function runCfdSimulation(fileObject) {
     const progressInner = document.getElementById("upload-progress-inner");
     const percentLabel = document.getElementById("upload-percent-label");
 
-    // Ingest text if it is a File object
-    let fileText = "";
+    // Read the file as BINARY and parse it as DICOM.
+    //
+    // This used to call readAsText() and pull "metadata" out with regexes like
+    // /PATIENT_ID\s*=\s*(PT-\d{4}-\d{4})/. That is not DICOM parsing — it only
+    // ever worked because the .dcm files in the repo were ASCII stubs. A real
+    // scan produced mojibake and the handler then fell back to hardcoded
+    // defaults (512x512, 142 slices, 0.5 mm), presenting invented numbers as
+    // though they had been read from the file.
+    let dicom = null;
     if (fileObject && typeof fileObject !== "string") {
         try {
-            fileText = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = (err) => reject(err);
-                reader.readAsText(fileObject);
-            });
+            const buf = await fileObject.arrayBuffer();
+            dicom = window.NeuroDicom ? window.NeuroDicom.parse(buf) : null;
         } catch (e) {
-            writeTerminalLog(`[WARNING] Failed to read file data: ${e.message}`, "warning");
+            writeTerminalLog(`[ERROR] Could not read the file: ${e.message}`, "error");
         }
     }
 
-    // Default clinical parameters
-    let patientId = "";
-    let modality = "MR";
-    let studyDate = "20260705";
-    let rows = 512;
-    let columns = 512;
-    let sliceThickness = 0.5;
-    let pathology = "Cerebral Vasculature";
-    let numSlices = 142;
-
-    // 1. Extract patient ID from filename (e.g. PT-2025-0061)
-    const fileIdMatch = fileName.match(/(PT-\d{4}-\d{4})/i);
-    if (fileIdMatch) {
-        patientId = fileIdMatch[1].toUpperCase();
+    if (dicom && !dicom.ok) {
+        // Stop rather than proceed on defaults. Continuing would present
+        // fabricated dimensions as though they came from the upload.
+        writeTerminalLog(`[REJECTED] ${dicom.reason}`, "error");
+        writeTerminalLog("[INFO] Pipeline aborted — nothing was analysed.", "info");
+        activeStepBadge.textContent = "Rejected";
+        return;
     }
 
-    // 2. Extract values from file text if present
-    if (fileText) {
-        const contentIdMatch = fileText.match(/PATIENT_ID\s*=\s*(PT-\d{4}-\d{4})/i);
-        if (contentIdMatch && !patientId) {
-            patientId = contentIdMatch[1].toUpperCase();
+    // Clinical parameters, taken from the file itself.
+    //
+    // No fabricated defaults. Every value below is either read from the parsed
+    // DICOM header or left explicitly unknown, because the alternative — the
+    // previous 512x512 / 142-slice / 0.5 mm placeholders — printed invented
+    // numbers into a log that says "PARSING ... extracted from the file".
+    const t = (dicom && dicom.ok) ? dicom.tags : {};
+
+    let patientId = (t.patientID || "").toString().trim().toUpperCase();
+    const modality = t.modality || null;
+    const studyDate = t.studyDate || null;
+    const rows = Number.isFinite(+t.rows) ? +t.rows : null;
+    const columns = Number.isFinite(+t.columns) ? +t.columns : null;
+    const sliceThickness = Number.isFinite(parseFloat(t.sliceThickness))
+        ? parseFloat(t.sliceThickness) : null;
+    const manufacturer = t.manufacturer || null;
+    const bodyPart = t.bodyPartExamined || null;
+    const seriesDesc = t.seriesDescription || t.protocolName || null;
+    const pathology = bodyPart ? `${bodyPart} vasculature` : "Cerebral vasculature";
+
+    // A single file is one slice. Claiming a series count from it would be a
+    // guess, and the old code guessed 142 every time.
+    const numSlices = 1;
+
+    // Fall back to the filename ONLY when the header carries no PatientID.
+    if (!patientId) {
+        const fileIdMatch = fileName.match(/(PT-\d{4}-\d{4})/i);
+        if (fileIdMatch) {
+            patientId = fileIdMatch[1].toUpperCase();
+            writeTerminalLog(
+                "[WARNING] No PatientID (0010,0020) in the header; using the filename.",
+                "warning");
         }
-        const studyDateMatch = fileText.match(/STUDY_DATE\s*=\s*([^\r\n]+)/i);
-        if (studyDateMatch) studyDate = studyDateMatch[1].trim();
-
-        const modalityMatch = fileText.match(/MODALITY\s*=\s*([^\r\n(]+)/i);
-        if (modalityMatch) modality = modalityMatch[1].trim();
-
-        const rowsMatch = fileText.match(/ROWS\s*=\s*(\d+)/i);
-        if (rowsMatch) rows = parseInt(rowsMatch[1]);
-
-        const colsMatch = fileText.match(/COLUMNS\s*=\s*(\d+)/i);
-        if (colsMatch) columns = parseInt(colsMatch[1]);
-
-        const thicknessMatch = fileText.match(/SLICE_THICKNESS\s*=\s*([\d.]+)/i);
-        if (thicknessMatch) sliceThickness = parseFloat(thicknessMatch[1]);
-
-        const pathologyMatch = fileText.match(/VASCULAR_PATHOLOGY\s*=\s*([^\r\n]+)/i);
-        if (pathologyMatch) pathology = pathologyMatch[1].trim();
-
-        const slicesMatch = fileText.match(/NUMBER_OF_SLICES\s*=\s*(\d+)/i);
-        if (slicesMatch) numSlices = parseInt(slicesMatch[1]);
     }
 
     if (!patientId) {
@@ -1369,9 +1401,19 @@ async function runCfdSimulation(fileObject) {
         const speed = (44 + Math.random() * 3).toFixed(1);
         speedSpan.textContent = `${speed} MB/s`;
 
-        if (progress === 30) writeTerminalLog(`[SUCCESS] Ingested ${numSlices} slices in series.`, "success");
-        if (progress === 60) writeTerminalLog(`[PARSING] Extracting matrix size: ${rows} x ${columns} pixels...`, "exec");
-        if (progress === 80) writeTerminalLog(`[PARSING] Detecting slice thickness: ${sliceThickness.toFixed(2)}mm...`, "exec");
+        // Report what was actually read. `sliceThickness.toFixed(2)` used to be
+        // called unconditionally on a value that is null when the tag is
+        // absent — a TypeError that would have aborted the upload.
+        if (progress === 30) writeTerminalLog(
+            `[SUCCESS] Read ${numSlices} slice from ${modality || "unknown modality"}${manufacturer ? ` (${manufacturer})` : ""}.`, "success");
+        if (progress === 60) writeTerminalLog(
+            rows && columns
+                ? `[PARSING] Matrix size ${rows} x ${columns} px (0028,0010/0011).`
+                : "[PARSING] Matrix size not present in the header.", "exec");
+        if (progress === 80) writeTerminalLog(
+            sliceThickness !== null
+                ? `[PARSING] Slice thickness ${sliceThickness.toFixed(2)} mm (0018,0050).`
+                : "[PARSING] Slice thickness not present in the header.", "exec");
 
         await sleep(300);
     }
@@ -1688,41 +1730,67 @@ async function runCfdSimulation(fileObject) {
     // Hemodynamic scenario values are seeded from the filename (demo cases),
     // but the resulting risk tier is always derived via computeCompositeRisk()
     // rather than being hardcoded, so it can never disagree with the metrics shown.
-    if (!patientDatabase[patientId]) {
-        let scenario = "High";
-        if (patientId.includes("0039")) scenario = "Low";
-        else if (patientId.includes("0037")) scenario = "Moderate";
+    // Results for an uploaded scan.
+    //
+    // WHAT THIS REPLACES
+    // The previous block invented them. It picked a "scenario" by checking
+    // whether the patient ID contained "0039" or "0037", then hardcoded
+    // TAWSS 0.28/0.45/0.85, OSI 0.34/0.22/0.08, diameters, ages and a
+    // hypertension flag — and announced "Computational fluid dynamics
+    // simulation completed" over the top of them. Nothing was solved, and the
+    // numbers had no relationship to the uploaded file whatsoever.
+    //
+    // What is true: a cardiac-cycle solve on this hardware takes hours (the
+    // 239k-cell case took ~10 h for one cycle). It cannot happen between a
+    // file drop and a progress bar. So there are exactly two honest outcomes.
+    const solved = patientDatabase[patientId];
 
-        const tawss = (scenario === "High") ? 0.28 : (scenario === "Moderate" ? 0.45 : 0.85);
-        const osi = (scenario === "High") ? 0.34 : (scenario === "Moderate" ? 0.22 : 0.08);
-        const maxDiameter = (scenario === "High") ? 6.8 : (scenario === "Moderate" ? 5.2 : 3.1);
-        const aspectRatio = (scenario === "High") ? 1.8 : (scenario === "Moderate" ? 1.4 : 0.9);
-        const age = (scenario === "High") ? 70 : (scenario === "Moderate" ? 55 : 40);
-        const site = (scenario === "High") ? "MCA" : "ICA";
+    if (solved) {
+        // The scan belongs to a case that HAS been solved. Everything shown is
+        // that case's real computed output — no substitution, no interpolation.
+        writeTerminalLog(`[MATCH] '${patientId}' has a completed CFD run in this workspace.`, "success");
+        writeTerminalLog("[INFO] Displaying its computed hemodynamics.", "info");
+    } else {
+        // Unknown patient. Record what the file genuinely says and nothing
+        // more. Hemodynamics stay absent — the gauges already know how to
+        // render "not computed", so an unsolved case reads as unsolved rather
+        // than as a clean bill of health.
+        writeTerminalLog(`[QUEUED] '${patientId}' has no completed CFD run.`, "warning");
+        writeTerminalLog("[INFO] Header ingested. Hemodynamics require a full solve "
+                       + "(~hours per cardiac cycle) and are shown as not computed.", "info");
 
         patientDatabase[patientId] = {
             id: patientId,
-            morphology: {
-                maxDiameter: maxDiameter,
-                aspectRatio: aspectRatio
-            },
+            awaitingCfd: true,
+            morphology: {},          // requires segmentation + reconstruction
             demographics: {
-                age: age,
-                hypertension: scenario === "High",
-                earlierSAH: false,
-                population: "Other",
-                site: site
+                age: null, hypertension: false, earlierSAH: false,
+                population: "Other", site: null,
             },
             zones: [
-                { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 1.92, osi: 0.03, isAneurysm: false },
-                { name: "Parent Artery Outlet", id: "3942", x: 470, y: 278, radius: 55, tawss: 1.74, osi: 0.04, isAneurysm: false },
-                { name: "Aneurysm Neck", id: "4109", x: 320, y: 220, radius: 35, tawss: tawss * 1.35, osi: osi * 0.85, isAneurysm: true },
-                { name: "Aneurysm Dome", id: "4289", x: 320, y: 120, radius: 50, tawss: tawss, osi: osi, isAneurysm: true }
+                { name: "Parent Artery Inlet", id: "3891", x: 160, y: 278, radius: 55, tawss: 0, osi: 0, isAneurysm: false },
+                { name: "Parent Artery Outlet", id: "3942", x: 470, y: 278, radius: 55, tawss: 0, osi: 0, isAneurysm: false },
+                { name: "Aneurysm Neck", id: "4109", x: 320, y: 220, radius: 35, tawss: 0, osi: 0, isAneurysm: true },
+                { name: "Aneurysm Dome", id: "4289", x: 320, y: 120, radius: 50, tawss: 0, osi: 0, isAneurysm: true },
             ],
-            clinicalAssessment: `Computational fluid dynamics simulation completed for case ${patientId}. Severe wall shear stress stagnation identified near the aneurysm dome (TAWSS = ${tawss.toFixed(2)} Pa, OSI = ${osi.toFixed(2)}). Anisotropic scan reconstructions indicate a vascular dome of ${maxDiameter.toFixed(1)} mm and an aspect ratio of ${aspectRatio.toFixed(1)}. Clinical monitoring of this ${pathology} target is recommended.`
+            hemodynamics: { transient: false },
+            dicom: {
+                modality, studyDate, rows, columns, sliceThickness,
+                manufacturer, bodyPart, seriesDescription: seriesDesc,
+                fileName,
+            },
+            clinicalAssessment:
+                `No CFD solve has been run for ${patientId}. The uploaded series was read `
+                + `successfully — ${[modality && `modality ${modality}`,
+                                     rows && columns && `${rows}x${columns} px`,
+                                     sliceThickness !== null && `${sliceThickness.toFixed(2)} mm slices`,
+                                     manufacturer].filter(Boolean).join(", ")} `
+                + `— but wall shear stress, OSI, RRT and ECAP are derived from a `
+                + `Navier-Stokes solution that has not been computed. On this hardware a `
+                + `single cardiac cycle takes several hours. No hemodynamic values are `
+                + `shown for this case because none exist.`,
         };
 
-        // Redraw patient switcher list
         renderPatientList();
     }
 
@@ -1734,7 +1802,16 @@ async function runCfdSimulation(fileObject) {
     loadPatientData(patientDatabase[patientId]);
 
     // Display custom alert notification of successful pipeline execution
-    alert(`Computational pipeline completed successfully!\nPatient data for ${patientId} loaded into dashboard.`);
+    // Say which of the two things actually happened. "Computational pipeline
+    // completed successfully" was printed unconditionally, including over
+    // fabricated numbers for a case that had never been solved.
+    alert(solved
+        ? `Scan ingested for ${patientId}.\n\nThis case has a completed CFD run — `
+          + `its computed hemodynamics are now shown.`
+        : `Scan ingested for ${patientId}.\n\nThe DICOM header was read successfully, `
+          + `but no CFD solve exists for this case, so wall shear stress, OSI, RRT and `
+          + `ECAP are shown as not computed. A single cardiac cycle takes several hours `
+          + `on this hardware.`);
 }
 
 // Start Application on Page Load

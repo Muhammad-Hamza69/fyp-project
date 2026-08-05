@@ -42,3 +42,6 @@ cases/
 # --- os / editor ---
 .DS_Store
 Thumbs.db
+
+.vercel
+.env*

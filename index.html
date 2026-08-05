@@ -758,6 +758,9 @@
     <!-- 3D nerve/vascular model viewer (Three.js) -->
     <script type="module" src="neuro3d.js"></script>
     <!-- Application script -->
+    <!-- Real binary DICOM parsing for the upload flow. Must load BEFORE app.js,
+         which calls window.NeuroDicom.parse() on the dropped file. -->
+    <script src="dicom.js"></script>
     <script src="app.js"></script>
 </body>
 

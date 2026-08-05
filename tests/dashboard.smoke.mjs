@@ -197,6 +197,69 @@ if (cards.length) {
           (txt("rrt-gauge-val") || "") !== "" && (txt("phases-total-points") || "") !== "");
 }
 
+// --- DICOM parsing --------------------------------------------------------
+//
+// The upload handler used to read files with readAsText() and regex out
+// "metadata", which only worked on the ASCII stubs that used to ship as .dcm.
+// These assertions pin that a real file is read from its bytes and a non-DICOM
+// file is refused rather than silently replaced by hardcoded defaults.
+{
+    // Evaluated in the window, exactly as the <script> tag does in index.html.
+    window.eval(readFileSync(resolve(ROOT, "dicom.js"), "utf8"));
+    const D = window.NeuroDicom;
+    check("dicom.js exposes a parser", !!(D && D.parse));
+
+    if (D && D.parse) {
+        // The buffer has to be allocated inside the jsdom realm: a Node
+        // ArrayBuffer passed across realms is not recognised by that realm's
+        // DataView, and the parser would fail for a reason that has nothing to
+        // do with the file.
+        const toBuf = (p) => {
+            const b = readFileSync(resolve(ROOT, p));
+            const ab = new window.ArrayBuffer(b.length);
+            new window.Uint8Array(ab).set(b);
+            return ab;
+        };
+
+        for (const [file, id] of [
+            ["samples/PT-2026-0101_MRA_AXIAL.dcm", "PT-2026-0101"],
+            ["samples/PT-2026-0103_MRA_AXIAL.dcm", "PT-2026-0103"],
+        ]) {
+            let r;
+            try { r = D.parse(toBuf(file)); } catch (e) { r = { ok: false, reason: String(e) }; }
+            check(`real DICOM parses: ${id}`, r.ok, r.reason || "");
+            if (r.ok) {
+                check(`  PatientID read from the header (${id})`, r.tags.patientID === id,
+                      `got ${JSON.stringify(r.tags.patientID)}`);
+                check(`  Modality read (${id})`, r.tags.modality === "MR");
+                check(`  dimensions read (${id})`,
+                      Number.isFinite(+r.tags.rows) && Number.isFinite(+r.tags.columns));
+                check(`  slice thickness read (${id})`,
+                      Number.isFinite(parseFloat(r.tags.sliceThickness)));
+            }
+        }
+
+        // A plain-text file named .dcm — exactly what used to ship in this repo
+        // and exactly what the old readAsText()+regex handler "parsed"
+        // successfully. Synthesised here so the test carries no fixture.
+        const stubText =
+            "PATIENT_ID = PT-2025-0061\nMODALITY = MR\nROWS = 512\nCOLUMNS = 512\n"
+            + "SLICE_THICKNESS = 0.5\nNUMBER_OF_SLICES = 142\n".repeat(6);
+        const stubBuf = new window.ArrayBuffer(stubText.length);
+        const bytes = new window.Uint8Array(stubBuf);
+        for (let i = 0; i < stubText.length; i++) bytes[i] = stubText.charCodeAt(i);
+
+        const stub = D.parse(stubBuf);
+        check("ASCII stub is rejected, not parsed", stub.ok === false);
+        check("  rejection explains why", /DICM/.test(stub.reason || ""),
+              stub.reason || "");
+
+        // Random bytes must not be mistaken for a scan.
+        check("random bytes rejected", D.parse(new window.ArrayBuffer(4096)).ok === false);
+        check("undersized file rejected", D.parse(new window.ArrayBuffer(8)).ok === false);
+    }
+}
+
 check("page produced no uncaught errors overall", errors.length === 0,
       errors.join("\n          "));
 
