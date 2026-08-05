@@ -2382,3 +2382,14 @@ body {
     color: var(--color-mod-risk, #C47D1A);
     font-weight: 600;
 }
+
+/* Shown when PHASES cannot be scored because the clinical history is absent. */
+.phases-missing {
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    padding: 6px 8px;
+    background-color: rgba(148, 163, 184, 0.10);
+    border-left: 3px solid var(--text-secondary);
+    border-radius: 3px;
+}

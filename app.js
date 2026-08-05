@@ -22,7 +22,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
  * Scaled to keep the stages legible while getting out of the way. Set to 0 for
  * an instant run.
  */
-const PIPELINE_SPEED = 0.12;
+const PIPELINE_SPEED = 0.06;
 const animSleep = ms => sleep(Math.round(ms * PIPELINE_SPEED));
 
 // Helper: Linear Interpolation for numbers
@@ -340,6 +340,26 @@ const PHASES_RISK_TABLE = [
 function phasesRiskPercentFromPoints(points) {
     const bracket = PHASES_RISK_TABLE.find(b => points <= b.max);
     return bracket.percent;
+}
+
+/**
+ * Which PHASES inputs this case actually has.
+ *
+ * PHASES needs clinical history — hypertension, prior subarachnoid haemorrhage,
+ * population, aneurysm site — none of which appears in a DICOM header. Treating
+ * an unknown as "No" scores it 0 and yields a confident low rupture risk built
+ * from data nobody supplied. An uploaded scan was doing exactly that: 0 points,
+ * "0.4% 5-YR RUPTURE RISK", every component invented.
+ */
+function phasesMissingInputs(patient) {
+    const d = (patient && patient.demographics) || {};
+    const missing = [];
+    if (d.age === null || d.age === undefined) missing.push("age");
+    if (d.hypertension === null || d.hypertension === undefined) missing.push("hypertension");
+    if (d.earlierSAH === null || d.earlierSAH === undefined) missing.push("prior SAH");
+    if (!d.population) missing.push("population");
+    if (!d.site) missing.push("aneurysm site");
+    return missing;
 }
 
 function computePhasesScore(patient) {
@@ -675,10 +695,30 @@ function loadPatientData(patient) {
 
 // PHASES Clinical Risk Score Card Renderer
 function renderPhasesScore(patient) {
+    // A score built from unknowns is worse than no score: 0 points reads as
+    // "low risk", not as "we were never told".
+    const missing = phasesMissingInputs(patient);
+    if (missing.length) {
+        phasesTotalPointsEl.textContent = "n/a";
+        phasesTotalPointsEl.classList.add("gauge-not-computed");
+        phasesRiskPercentEl.textContent = "—";
+        phasesRiskPercentEl.classList.add("gauge-not-computed");
+        phasesBreakdownEl.innerHTML =
+            `<div class="phases-missing">
+               <i class="fa-solid fa-circle-info"></i>
+               PHASES needs clinical history a scan does not contain.
+               Missing: <strong>${missing.join(", ")}</strong>.
+               Supply these to score the case.
+             </div>`;
+        return;
+    }
+
     const { items, points, riskPercent } = computePhasesScore(patient);
 
     phasesTotalPointsEl.textContent = points;
+    phasesTotalPointsEl.classList.remove("gauge-not-computed");
     phasesRiskPercentEl.textContent = `${riskPercent.toFixed(1)}%`;
+    phasesRiskPercentEl.classList.remove("gauge-not-computed");
 
     phasesBreakdownEl.innerHTML = items.map(item => `
         <div class="phases-breakdown-row">
@@ -829,13 +869,26 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                     : `Not measurable from this file — enter the values from your `
                       + `own reading of the scan.`;
             }
+            // If the sac measured successfully, COMPUTE NOW rather than
+            // waiting for a click.
+            //
+            // Asking the user to confirm a number the software had already read
+            // off their scan added a manual step to a path whose whole point is
+            // that it is instant, and — with the modal still showing a solver
+            // log — it looked like the machine was busy rather than waiting.
+            //
+            // The measurement is still correctable: the form stays on screen
+            // with the values in it, and changing either one recomputes. Nothing
+            // is hidden, only the blocking step is gone.
             card.classList.remove("hidden");
-            // Say that the pipeline has STOPPED and is waiting for input. The
-            // badge still reading "Step 06 / 06" beside a scrolling solver log
-            // makes a form that is waiting for a click look like a machine
-            // still working — which is what made this feel slow rather than
-            // interactive.
-            if (activeStepBadge) activeStepBadge.textContent = "Awaiting your confirmation";
+            if (measured) {
+                if (activeStepBadge) activeStepBadge.textContent = "Estimated";
+                onGo();
+                return;
+            }
+            // No usable measurement — there is nothing to compute FROM, so this
+            // genuinely has to ask.
+            if (activeStepBadge) activeStepBadge.textContent = "Measurements needed";
             if (domeEl) domeEl.focus();
         }).catch((err) => {
             writeTerminalLog(`[ERROR] Surrogate unavailable: ${err.message}`, "error");
@@ -907,7 +960,12 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                     + "to calibrate them.", "info");
             }
 
-            const ar = +(dome / Math.max(neck, 0.1)).toFixed(2);
+            // DICOM PatientAge is "045Y" / "045M" / "045D"; only years are useful here.
+        const rawAge = (dicomMeta && dicomMeta.patientAge) || "";
+        const mAge = /^(\d{1,3})Y?$/.exec(String(rawAge).trim());
+        const dicomAge = mAge ? parseInt(mAge[1], 10) : null;
+
+        const ar = +(dome / Math.max(neck, 0.1)).toFixed(2);
             patientDatabase[patientId] = {
                 id: patientId,
                 estimated: true,
@@ -915,9 +973,23 @@ function promptMorphologyAndEstimate(patientId, dicomMeta, measured) {
                     maxDiameter: dome, neckDiameterMm: neck,
                     aspectRatio: ar, domeToNeck: ar,
                 },
+                // NOT invented.
+                //
+                // These used to default to age 60, no hypertension, no prior
+                // SAH, population Other, site ICA — none of which comes from a
+                // DICOM header. PHASES was then computed from five made-up
+                // inputs and displayed as a 5-year rupture risk. The arithmetic
+                // was right and the result meaningless.
+                //
+                // PatientAge (0010,1010) is used when the scan carries it.
+                // Everything else is clinical history no image contains, so it
+                // stays null and PHASES reports itself unavailable.
                 demographics: {
-                    age: 60, hypertension: false, earlierSAH: false,
-                    population: "Other", site: "ICA",
+                    age: dicomAge,
+                    hypertension: null,
+                    earlierSAH: null,
+                    population: null,
+                    site: null,
                 },
                 zones: window.NeuroSurrogate.toZones(p),
                 hemodynamics: {
@@ -2169,6 +2241,7 @@ async function runCfdSimulation(fileObject) {
         await promptMorphologyAndEstimate(patientId, {
             modality, studyDate, rows, columns, sliceThickness,
             manufacturer, bodyPart, seriesDescription: seriesDesc, fileName,
+            patientAge: t.patientAge || null,
         }, measured);
         return;
     }

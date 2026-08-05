@@ -74,11 +74,14 @@ Object.defineProperty(uploader, "files", { value: [file], configurable: true });
 uploader.dispatchEvent(new window.Event("change"));
 
 // The flow has scripted sleeps; give it time, and report progress.
-let shown = false;
-for (let i = 0; i < 120; i++) {
-    await new Promise((r) => setTimeout(r, 500));
+// Wait for the OUTCOME, not for the form: when the sac measures successfully
+// the flow computes straight away and no form is shown.
+for (let i = 0; i < 200; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    const ids = [...window.document.querySelectorAll(".patient-card")].map((x) => x.dataset.id);
+    if (ids.includes("PT-2026-0303")) break;
     const c = $("morphology-prompt");
-    if (c && !c.classList.contains("hidden")) { shown = true; break; }
+    if (c && !c.classList.contains("hidden")) break;
 }
 const term = $("terminal-log-output");
 if (term) {
@@ -90,7 +93,7 @@ const modalOpen = $("simulation-modal") && !$("simulation-modal").classList.cont
 console.log(`  modal open when form shown: ${modalOpen}   <- must be true or the form is invisible`);
 
 const card = $("morphology-prompt");
-console.log(`  time to form: ${((Date.now()-t0)/1000).toFixed(1)} s`);
+console.log(`  TIME TO RESULT: ${((Date.now()-t0)/1000).toFixed(1)} s`);
 console.log(`  morphology prompt visible: ${card && !card.classList.contains("hidden")}`);
 console.log(`  dome prefilled: ${$("morph-dome") ? $("morph-dome").value : "n/a"}`);
 console.log(`  neck prefilled: ${$("morph-neck") ? $("morph-neck").value : "n/a"}`);
