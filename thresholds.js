@@ -39,15 +39,35 @@
         /**
          * Time-averaged wall shear stress, Pa.
          *
-         * TAWSS_LOW is the clinical low-shear threshold associated with
-         * endothelial dysfunction. The risk band runs from healthy parent-artery
-         * shear (~1.5 Pa, no risk) down to severe stagnation (0.15 Pa, full
-         * risk) — a genuinely clinical scale, unlike the OSI one it sits beside,
-         * which is why it is unchanged.
+         * TAWSS_LOW is the clinical low-shear threshold below which endothelial
+         * dysfunction and wall degeneration are associated.
+         *
+         * THE RISK BAND USED TO RUN 1.5 -> 0.15 Pa AND THAT WAS THE SECOND
+         * UNREACHABLE-BAND BUG IN THIS FILE.
+         *
+         * 1.5 Pa is healthy PARENT-ARTERY shear. But this term scores the SAC,
+         * and a sac has low shear by definition — slowing and recirculating the
+         * flow is what an aneurysm does. Every geometry in the calibrated range
+         * produces a sac TAWSS between 0.18 and 0.41 Pa, which against a
+         * 0.15-1.5 band scores 81% to 98%. A term carrying 35% of the composite
+         * weight was contributing a near-constant ~31 points to every case: it
+         * added an offset and discriminated nothing.
+         *
+         * That is the mirror image of the OSI bug below — that band's FLOOR was
+         * above every real value so the term pinned at 0; this band's CEILING
+         * was above every real value so the term pinned near 100. Both make a
+         * weighted term into a constant, and neither is visible without pushing
+         * two different cases through and comparing.
+         *
+         * The band now runs from the clinical low-shear threshold (0.4 Pa —
+         * at or above it there is no low-shear risk to score) down to 0.10 Pa,
+         * below the lowest value any solve here has produced (0.14 Pa, on
+         * PT-2026-0102). Sac TAWSS now spans 0% to 74% of the term instead of
+         * 81% to 98%.
          */
         TAWSS_LOW_PA: 0.4,
-        TAWSS_RISK_HIGH_PA: 1.5,
-        TAWSS_RISK_LOW_PA: 0.15,
+        TAWSS_RISK_HIGH_PA: 0.40,
+        TAWSS_RISK_LOW_PA: 0.10,
 
         /**
          * Area-averaged sac OSI, dimensionless, 0..0.5.
@@ -82,6 +102,37 @@
 
         RRT_HIGH: 3.0,
         ECAP_HIGH: 1.0,
+
+        /**
+         * Composite Risk Index tier boundaries.
+         *
+         * These were 45 and 75, and with the old TAWSS band the index could only
+         * reach 42.5 to 75.8 across the ENTIRE geometry space — 2 to 30 mm dome,
+         * aspect ratio 0.5 to 3.5. Almost the whole reachable range fell inside
+         * the Moderate band, so every case on the site read Moderate regardless
+         * of its geometry. Low required a 2 mm "aneurysm" at aspect ratio 0.5,
+         * which is not an aneurysm, and High required the extreme corner.
+         *
+         * Fixing the TAWSS band moves the reachable range to 14.2 - 67.3, which
+         * fixes Low but leaves High mathematically unreachable — the same defect
+         * in the other direction.
+         *
+         * So the boundaries are placed on the range the index can ACTUALLY
+         * produce, at roughly one third and three fifths of it:
+         *
+         *     reachable   14.2 ................................ 67.3
+         *     Low         <32
+         *     Moderate         32 ......... 55
+         *     High                            >=55
+         *
+         * They are constants rather than computed at runtime, so a case cannot
+         * change tier because some other case was added. A test asserts all
+         * three tiers stay reachable; if refitting the surrogate moves the
+         * range, that test fails and these get revisited deliberately rather
+         * than drifting.
+         */
+        CRI_MODERATE: 32,
+        CRI_HIGH: 55,
     };
 
     /** Normalise a value into 0..1 over [lo, hi], clamped. */

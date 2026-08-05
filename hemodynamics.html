@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hemodynamic Reference — NeuroFlow CFD Analyst</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="reference.css">
+</head>
+
+<body class="reference-body">
+    <header class="main-header">
+        <div class="logo-area">
+            <i class="fa-solid fa-brain clinical-logo-icon"></i>
+            <h1>NeuroFlow CFD Analyst</h1>
+        </div>
+        <div class="patient-banner">
+            <div class="banner-item">
+                <span class="banner-label">Page:</span>
+                <span class="banner-value">Hemodynamic Reference</span>
+            </div>
+        </div>
+        <div class="header-actions">
+            <a href="index.html" class="btn btn-primary btn-icon">
+                <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </header>
+
+    <main class="reference-main">
+        <nav class="reference-toc" aria-label="Contents">
+            <h2>Contents</h2>
+            <ol>
+                <li><a href="#physics">Governing physics</a></li>
+                <li><a href="#wss">Wall shear stress</a></li>
+                <li><a href="#derived">Pulsatile &amp; derived indices</a>
+                    <ol>
+                        <li><a href="#tawss">TAWSS</a></li>
+                        <li><a href="#osi">OSI</a></li>
+                        <li><a href="#rrt">RRT</a></li>
+                        <li><a href="#ecap">ECAP</a></li>
+                    </ol>
+                </li>
+                <li><a href="#summary">Summary table</a></li>
+                <li><a href="#inpractice">What this project computes</a></li>
+            </ol>
+        </nav>
+
+        <article class="reference-article">
+            <header class="reference-hero">
+                <p class="reference-eyebrow">Technical Reference</p>
+                <h1>Hemodynamic &amp; Morphology Parameters</h1>
+                <p class="reference-lede">
+                    CFD and morphological metrics for vascular risk assessment — the
+                    quantities the dashboard reports, where each one comes from, and what
+                    it means for the vessel wall.
+                </p>
+            </header>
+
+            <!-- ============================================================ -->
+            <section id="physics">
+                <h2><span class="sec-num">1</span> Governing physics: blood velocity &amp; pressure</h2>
+                <p>
+                    Blood velocity <em>u</em> and pressure <em>p</em> are solved
+                    <strong>simultaneously</strong> from the incompressible Navier&ndash;Stokes
+                    equations. Everything further down this page is derived from that solution
+                    — none of it is measured independently.
+                </p>
+
+                <div class="eq-block">
+                    <div class="eq-label">Continuity — conservation of mass</div>
+                    <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                        <mo>&#x2207;</mo><mo>&#x22C5;</mo><mi>u</mi>
+                        <mo>=</mo><mn>0</mn>
+                    </math>
+                </div>
+
+                <div class="eq-block">
+                    <div class="eq-label">Momentum — Navier&ndash;Stokes</div>
+                    <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                        <mi>&#x3C1;</mi>
+                        <mo fence="true">(</mo>
+                        <mfrac><mrow><mo>&#x2202;</mo><mi>u</mi></mrow><mrow><mo>&#x2202;</mo><mi>t</mi></mrow></mfrac>
+                        <mo>+</mo><mi>u</mi><mo>&#x22C5;</mo><mo>&#x2207;</mo><mi>u</mi>
+                        <mo fence="true">)</mo>
+                        <mo>=</mo>
+                        <mo>&#x2212;</mo><mo>&#x2207;</mo><mi>p</mi>
+                        <mo>+</mo><mi>&#x3BC;</mi><msup><mo>&#x2207;</mo><mn>2</mn></msup><mi>u</mi>
+                        <mo>+</mo><mi>f</mi>
+                    </math>
+                </div>
+
+                <table class="sym-table">
+                    <caption>Symbols, with the value this project actually uses</caption>
+                    <thead>
+                        <tr><th>Symbol</th><th>Quantity</th><th>Used here</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>u</code></td>
+                            <td>Blood velocity vector field <em>(u<sub>x</sub>, u<sub>y</sub>, u<sub>z</sub>)</em>, from the solver</td>
+                            <td>solved</td>
+                        </tr>
+                        <tr>
+                            <td><code>p</code></td>
+                            <td>Static pressure distribution, solved simultaneously with <code>u</code></td>
+                            <td>solved</td>
+                        </tr>
+                        <tr>
+                            <td><code>&rho;</code></td>
+                            <td>Blood density</td>
+                            <td><strong>1060 kg/m<sup>3</sup></strong></td>
+                        </tr>
+                        <tr>
+                            <td><code>&mu;</code></td>
+                            <td>Dynamic viscosity of blood</td>
+                            <td><strong>0.0035 Pa&middot;s</strong></td>
+                        </tr>
+                        <tr>
+                            <td><code>f</code></td>
+                            <td>External body forces</td>
+                            <td>neglected</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="note note-warn">
+                    <strong>&rho; is not only a physical constant here — it is a unit conversion.</strong>
+                    OpenFOAM's incompressible solvers work in <em>kinematic</em> units, so
+                    <code>wallShearStress</code> comes out in m&sup2;/s&sup2;, not pascals.
+                    Every shear value must be multiplied by &rho; to become a stress. Miss it and
+                    every TAWSS on this site is roughly a thousand times too small, and every
+                    low-shear alert fires on every case.
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section id="wss">
+                <h2><span class="sec-num">2</span> The fundamental wall parameter: wall shear stress</h2>
+                <p>
+                    Wall shear stress <em>&tau;<sub>w</sub></em> is the tangential frictional
+                    force flowing blood exerts on the endothelium — the single cell layer lining
+                    the vessel. It is the boundary quantity from which every pulsatile index
+                    below is derived.
+                </p>
+
+                <div class="eq-block">
+                    <div class="eq-label">Wall shear stress vector</div>
+                    <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                        <msub><mi>&#x3C4;</mi><mi>w</mi></msub>
+                        <mo>=</mo>
+                        <mi>&#x3BC;</mi>
+                        <msub>
+                            <mrow><mo fence="true">(</mo>
+                                <mfrac><mrow><mo>&#x2202;</mo><mi>u</mi></mrow><mrow><mo>&#x2202;</mo><mi>n</mi></mrow></mfrac>
+                            <mo fence="true">)</mo></mrow>
+                            <mi>wall</mi>
+                        </msub>
+                    </math>
+                </div>
+
+                <p>
+                    <em>n</em> is the wall normal, so <math xmlns="http://www.w3.org/1998/Math/MathML"><mo>&#x2202;</mo><mi>u</mi><mo>/</mo><mo>&#x2202;</mo><mi>n</mi></math>
+                    is how quickly velocity changes as you move away from the wall.
+                </p>
+
+                <div class="note">
+                    <strong>This is why mesh resolution matters most at the wall.</strong>
+                    WSS is a <em>gradient</em> measured across the very first cell touching the
+                    surface. Coarse cells smear that gradient and under-report the stress, which
+                    is why the meshes in this project carry prism layers on the wall patches, and
+                    why the coarse transient runs used for OSI are explicitly <em>not</em> used
+                    for TAWSS.
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section id="derived">
+                <h2><span class="sec-num">3</span> Pulsatile &amp; derived indices</h2>
+                <p>
+                    Over a heartbeat of duration <em>T</em>, both the direction and magnitude of
+                    the flow change continuously. The indices below integrate that behaviour
+                    across the cycle — which is why every one of them requires a
+                    <strong>transient</strong> solve, and why a steady solve produces some of
+                    them and not others.
+                </p>
+
+                <!-- ------------------------------------------------ TAWSS -->
+                <div class="metric-block" id="tawss">
+                    <h3>3.1 &nbsp;Time-averaged wall shear stress <span class="metric-tag">TAWSS</span></h3>
+                    <p>The mean <em>magnitude</em> of the instantaneous WSS vector over one cycle.</p>
+
+                    <div class="eq-block">
+                        <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                            <mi>TAWSS</mi><mo>=</mo>
+                            <mfrac><mn>1</mn><mi>T</mi></mfrac>
+                            <msubsup><mo>&#x222B;</mo><mn>0</mn><mi>T</mi></msubsup>
+                            <mrow><mo>|</mo><msub><mi>&#x3C4;</mi><mi>w</mi></msub><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>|</mo></mrow>
+                            <mspace width="0.15em"/><mi>d</mi><mi>t</mi>
+                        </math>
+                    </div>
+
+                    <div class="two-col">
+                        <div class="interp interp-high">
+                            <h4>Higher TAWSS</h4>
+                            <p>Stronger frictional load on the wall — fast-moving flow.</p>
+                        </div>
+                        <div class="interp interp-low">
+                            <h4>Lower TAWSS</h4>
+                            <p>Stagnation, endothelial dysfunction, wall degeneration and
+                               aneurysm growth. Below <strong>0.4&nbsp;Pa</strong> is the
+                               threshold this dashboard alerts on.</p>
+                        </div>
+                    </div>
+
+                    <div class="note note-warn">
+                        <strong>The magnitude goes inside the integral, not outside.</strong>
+                        Averaging the WSS <em>vector</em> and then taking its magnitude gives
+                        <math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mo>|</mo><mover><msub><mi>&#x3C4;</mi><mi>w</mi></msub><mo>&#xAF;</mo></mover><mo>|</mo></mrow></math>,
+                        which is the <em>numerator of OSI</em> — a different quantity that is
+                        smaller wherever the flow oscillates. Chain the operations the wrong way
+                        round and TAWSS silently reads low precisely in the disturbed regions
+                        you care about.
+                    </div>
+                </div>
+
+                <!-- -------------------------------------------------- OSI -->
+                <div class="metric-block" id="osi">
+                    <h3>3.2 &nbsp;Oscillatory shear index <span class="metric-tag">OSI</span></h3>
+                    <p>How far the WSS vector deviates from, and reverses against, the dominant flow direction.</p>
+
+                    <div class="eq-block">
+                        <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                            <mi>OSI</mi><mo>=</mo>
+                            <mfrac><mn>1</mn><mn>2</mn></mfrac>
+                            <mrow><mo fence="true">(</mo>
+                                <mn>1</mn><mo>&#x2212;</mo>
+                                <mfrac>
+                                    <mrow><mo>|</mo><msubsup><mo>&#x222B;</mo><mn>0</mn><mi>T</mi></msubsup><msub><mi>&#x3C4;</mi><mi>w</mi></msub><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mi>d</mi><mi>t</mi><mo>|</mo></mrow>
+                                    <mrow><msubsup><mo>&#x222B;</mo><mn>0</mn><mi>T</mi></msubsup><mo>|</mo><msub><mi>&#x3C4;</mi><mi>w</mi></msub><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>|</mo><mi>d</mi><mi>t</mi></mrow>
+                                </mfrac>
+                            <mo fence="true">)</mo></mrow>
+                        </math>
+                    </div>
+
+                    <p class="bounded">Bounded: &nbsp;0 &le; OSI &le; 0.5</p>
+
+                    <div class="two-col">
+                        <div class="interp interp-low">
+                            <h4>OSI = 0</h4>
+                            <p>Blood flows in strictly one direction for the whole cycle.</p>
+                        </div>
+                        <div class="interp interp-high">
+                            <h4>OSI = 0.5</h4>
+                            <p>The flow reverses so completely that net forward shear is zero.
+                               High OSI marks recirculation, vortex formation and rupture-prone
+                               regions.</p>
+                        </div>
+                    </div>
+
+                    <div class="note note-warn">
+                        <strong>A steady solve cannot produce OSI. It produces exactly zero, by construction.</strong>
+                        With one flow state, the two integrals are the same vector, the fraction
+                        is 1, and OSI is 0 — not because the flow does not oscillate, but because
+                        nothing was ever averaged. This is why the dashboard shows
+                        <code>n/a</code> rather than <code>0.00</code> for a steady case: 0.00 is
+                        the most reassuring value on the scale, and it would be a measurement
+                        nobody made.
+                    </div>
+                </div>
+
+                <!-- -------------------------------------------------- RRT -->
+                <div class="metric-block" id="rrt">
+                    <h3>3.3 &nbsp;Relative residence time <span class="metric-tag">RRT</span></h3>
+                    <p>How long blood lingers near the wall, coupling <em>low</em> shear magnitude with <em>directional</em> oscillation.</p>
+
+                    <div class="eq-block">
+                        <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                            <mi>RRT</mi><mo>=</mo>
+                            <mfrac>
+                                <mn>1</mn>
+                                <mrow><mo stretchy="false">(</mo><mn>1</mn><mo>&#x2212;</mo><mn>2</mn><mo>&#x22C5;</mo><mi>OSI</mi><mo stretchy="false">)</mo><mo>&#xD7;</mo><mi>TAWSS</mi></mrow>
+                            </mfrac>
+                        </math>
+                    </div>
+
+                    <div class="two-col">
+                        <div class="interp interp-high">
+                            <h4>High RRT</h4>
+                            <p>Slow, stagnant flow hugging the wall. This dashboard alerts above
+                               <strong>3.0&nbsp;Pa<sup>&minus;1</sup></strong>.</p>
+                        </div>
+                        <div class="interp">
+                            <h4>Why it matters</h4>
+                            <p>Strongly associated with thrombus formation, platelet deposition
+                               and aneurysm progression.</p>
+                        </div>
+                    </div>
+
+                    <div class="note note-warn">
+                        <strong>RRT must be averaged over the sac, not computed from the sac's averages.</strong>
+                        It is non-linear in TAWSS and OSI, so by Jensen's inequality the mean of
+                        the function is not the function of the means — and because the
+                        reciprocal is convex, evaluating it at average shear systematically
+                        <em>under</em>-reports residence time. On this cohort the gap was 11.07
+                        against 4.25, 21.35 against 7.10 and 7.17 against 2.94. The last of those
+                        sat below the 3.0 alert threshold, so a case that should have been
+                        flagged was not.
+                    </div>
+                </div>
+
+                <!-- ------------------------------------------------- ECAP -->
+                <div class="metric-block" id="ecap">
+                    <h3>3.4 &nbsp;Endothelial cell activation potential <span class="metric-tag">ECAP</span></h3>
+                    <p>The ratio of flow oscillation to shear magnitude — susceptibility to endothelial damage.</p>
+
+                    <div class="eq-block">
+                        <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                            <mi>ECAP</mi><mo>=</mo>
+                            <mfrac><mi>OSI</mi><mi>TAWSS</mi></mfrac>
+                            <mspace width="0.6em"/>
+                            <mrow><mo>[</mo><msup><mi>Pa</mi><mrow><mo>&#x2212;</mo><mn>1</mn></mrow></msup><mo>]</mo></mrow>
+                        </math>
+                    </div>
+
+                    <p class="arrow-chain">
+                        Higher ECAP <span class="arr">&rarr;</span> more endothelial damage
+                        <span class="arr">&rarr;</span> higher rupture risk
+                    </p>
+
+                    <div class="note">
+                        ECAP inherits OSI's dependence on a cardiac cycle exactly. On a steady
+                        solve it is <math xmlns="http://www.w3.org/1998/Math/MathML"><mn>0</mn><mo>/</mo><mi>TAWSS</mi><mo>=</mo><mn>0</mn></math>
+                        and is just as meaningless, so it is reported as <code>n/a</code> for the
+                        same reason.
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section id="summary">
+                <h2><span class="sec-num">4</span> Summary of parameters</h2>
+                <p>
+                    NeuroFlow visualises the fundamental flow fields — pressure, velocity,
+                    streamlines and WSS — and derives the pulsatile indicators from them.
+                </p>
+
+                <div class="table-scroll">
+                    <table class="param-table">
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Formula / field source</th>
+                                <th>Clinical &amp; biomechanical significance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Pressure</strong> <code>p</code></td>
+                                <td>Navier&ndash;Stokes momentum</td>
+                                <td>Hydrostatic pressure distribution; transmural wall forces.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Velocity</strong> <code>u</code></td>
+                                <td>Continuity &amp; momentum</td>
+                                <td>Streamlines, vortex cores, dynamic flow patterns.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>WSS</strong> <code>&tau;<sub>w</sub></code></td>
+                                <td><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#x3BC;</mi><mo stretchy="false">(</mo><mo>&#x2202;</mo><mi>u</mi><mo>/</mo><mo>&#x2202;</mo><mi>n</mi><mo stretchy="false">)</mo></math> at the wall</td>
+                                <td>Instantaneous endothelial friction vector field.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>TAWSS</strong></td>
+                                <td><math xmlns="http://www.w3.org/1998/Math/MathML"><mfrac><mn>1</mn><mi>T</mi></mfrac><mo>&#x222B;</mo><mo>|</mo><msub><mi>&#x3C4;</mi><mi>w</mi></msub><mo>|</mo><mi>d</mi><mi>t</mi></math></td>
+                                <td>Average shear load. Low &rarr; stagnation and wall weakening.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>OSI</strong></td>
+                                <td><math xmlns="http://www.w3.org/1998/Math/MathML"><mfrac><mn>1</mn><mn>2</mn></mfrac><mo stretchy="false">(</mo><mn>1</mn><mo>&#x2212;</mo><mfrac><mrow><mo>|</mo><mo>&#x222B;</mo><msub><mi>&#x3C4;</mi><mi>w</mi></msub><mo>|</mo></mrow><mrow><mo>&#x222B;</mo><mo>|</mo><msub><mi>&#x3C4;</mi><mi>w</mi></msub><mo>|</mo></mrow></mfrac><mo stretchy="false">)</mo></math></td>
+                                <td>Shear reversal, 0&ndash;0.5. High &rarr; recirculation and vortex.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>RRT</strong></td>
+                                <td><math xmlns="http://www.w3.org/1998/Math/MathML"><msup><mrow><mo>[</mo><mo stretchy="false">(</mo><mn>1</mn><mo>&#x2212;</mo><mn>2</mn><mi>OSI</mi><mo stretchy="false">)</mo><mi>TAWSS</mi><mo>]</mo></mrow><mrow><mo>&#x2212;</mo><mn>1</mn></mrow></msup></math></td>
+                                <td>Residence time near the wall. High &rarr; thrombus growth.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>ECAP</strong></td>
+                                <td><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>OSI</mi><mo>/</mo><mi>TAWSS</mi></math></td>
+                                <td>Oscillatory-to-shear ratio. High &rarr; peak endothelial damage.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <section id="inpractice">
+                <h2><span class="sec-num">5</span> What this project actually computes</h2>
+                <p>
+                    The formulas above are standard. This section is not — it records how each
+                    one is obtained <em>here</em>, so a reader can tell a solved quantity from an
+                    estimated one without reading the source.
+                </p>
+
+                <div class="table-scroll">
+                    <table class="param-table">
+                        <thead>
+                            <tr>
+                                <th>Quantity</th>
+                                <th>How it is obtained</th>
+                                <th>Evidence behind it</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Dome &amp; neck diameter,<br>aspect ratio</td>
+                                <td><strong>Measured from the uploaded file.</strong> Maximum inscribed
+                                    sphere in the voxelised lumen for surfaces; Otsu threshold plus
+                                    connected components for images.</td>
+                                <td>&minus;2.3&nbsp;% dome error against geometry of known size</td>
+                            </tr>
+                            <tr>
+                                <td>TAWSS, RRT,<br>NWSS, LSAR</td>
+                                <td><strong>Estimated</strong> by a response surface fitted to real
+                                    OpenFOAM solutions, evaluated at the measured geometry. The
+                                    parent artery is computed analytically from Poiseuille flow.</td>
+                                <td>10 steady <code>simpleFoam</code> solves,<br>domes 3.02&ndash;12.02&nbsp;mm</td>
+                            </tr>
+                            <tr>
+                                <td>OSI, ECAP</td>
+                                <td><strong>Estimated</strong> from the transient calibration. Cannot
+                                    come from the steady sweep — a steady solve has no cycle.</td>
+                                <td>3 transient <code>pimpleFoam</code> solves,<br>one full cardiac cycle each</td>
+                            </tr>
+                            <tr>
+                                <td>Composite Risk Index</td>
+                                <td><strong>Derived</strong> from the four values above:
+                                    TAWSS&nbsp;35&nbsp;%, OSI&nbsp;30&nbsp;%, diameter&nbsp;20&nbsp;%,
+                                    aspect ratio&nbsp;15&nbsp;%, each normalised over a calibrated band.</td>
+                                <td>bands anchored on solved data</td>
+                            </tr>
+                            <tr>
+                                <td>PHASES clinical score</td>
+                                <td><strong>Read from the file's clinical history</strong> when present.
+                                    Age, hypertension, prior SAH, population and site are not in the
+                                    pixels; when the file does not carry them, the score reports which
+                                    inputs are missing rather than assuming them.</td>
+                                <td>Greving et&nbsp;al., <em>Lancet Neurol</em> 2014</td>
+                            </tr>
+                            <tr>
+                                <td>Sac position in the 3D view</td>
+                                <td><strong>From the file only when the file records a site.</strong>
+                                    A bare STL or NIfTI carries no anatomical frame, so the sac is drawn
+                                    at a representative location while its size and shape stay measured.</td>
+                                <td>&mdash;</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="note note-warn">
+                    <strong>Estimated is not solved.</strong> The surrogate interpolates between
+                    real CFD solutions; it is not a solve of your geometry. A full transient solve
+                    of one case takes hours on this hardware, which is the irreducible cost of the
+                    physics. Outside the calibrated diameter range the estimate is an
+                    extrapolation and is flagged as one on the case.
+                </div>
+            </section>
+
+            <footer class="reference-footer">
+                <p>
+                    Solver: OpenFOAM ESI v2412 &mdash;
+                    <code>simpleFoam</code> (steady), <code>pimpleFoam</code> (transient),
+                    <code>snappyHexMesh</code>.
+                    Blood modelled as Newtonian, &rho;&nbsp;=&nbsp;1060&nbsp;kg/m<sup>3</sup>,
+                    &mu;&nbsp;=&nbsp;0.0035&nbsp;Pa&middot;s.
+                </p>
+                <p class="footer-caution">
+                    Research and educational use. Not a medical device and not validated for
+                    clinical decision-making.
+                </p>
+            </footer>
+        </article>
+    </main>
+</body>
+
+</html>

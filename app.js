@@ -282,9 +282,9 @@ function computeCompositeRisk(patient) {
 }
 
 function getRiskTier(score) {
-    if (score >= 75) {
+    if (score >= THRESHOLDS.CRI_HIGH) {
         return { riskLevel: "High", badgeClass: "badge-high", riskLabel: "High Rupture Risk", riskLabelClass: "color-high-risk" };
-    } else if (score >= 45) {
+    } else if (score >= THRESHOLDS.CRI_MODERATE) {
         return { riskLevel: "Moderate", badgeClass: "badge-moderate", riskLabel: "Moderate Risk Profile", riskLabelClass: "color-mod-risk" };
     }
     return { riskLevel: "Low", badgeClass: "badge-low", riskLabel: "Stable / Low Risk", riskLabelClass: "color-low-risk" };

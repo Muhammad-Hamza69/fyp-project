@@ -132,8 +132,24 @@ def _clamp01(v: float) -> float:
 
 
 def compute_composite(tawss: float, osi: float, diameter_mm: float, ar: float) -> dict[str, float]:
-    tawss_score = _clamp01((1.5 - tawss) / (1.5 - 0.15)) * 100
-    osi_score = _clamp01((osi - 0.03) / (0.35 - 0.03)) * 100
+    """
+    Mirrors computeRiskBreakdown in app.js. The bands live in thresholds.js and
+    are duplicated here because the worker cannot import a browser file; the
+    parity tests exist to catch exactly the drift that duplication invites.
+
+    They drifted. thresholds.js was recalibrated and this was not, so for a
+    while the dashboard and the PDF report scored the same case differently —
+    caught only because the tier assertion in test_risk_parity went red.
+
+    TAWSS band 0.40 -> 0.10 Pa: the term scores the SAC, whose shear is low by
+    definition, so the old 1.5 Pa ceiling (healthy PARENT artery shear) put
+    every real geometry at 81-98% of a term carrying 35% of the weight.
+
+    OSI band 0.002 -> 0.030: the old 0.03 floor came from the curated cases'
+    authored OSI values and sat above every solved value, pinning the term to 0.
+    """
+    tawss_score = _clamp01((0.40 - tawss) / (0.40 - 0.10)) * 100
+    osi_score = _clamp01((osi - 0.002) / (0.030 - 0.002)) * 100
     diameter_score = _clamp01((diameter_mm - 2.0) / (10.0 - 2.0)) * 100
     aspect_score = _clamp01((ar - 0.7) / (2.5 - 0.7)) * 100
     composite = (
@@ -149,7 +165,11 @@ def compute_composite(tawss: float, osi: float, diameter_mm: float, ar: float) -
 
 
 def tier_of(score: float) -> str:
-    return "High" if score >= 75 else ("Moderate" if score >= 45 else "Low")
+    # Mirrors CRI_HIGH / CRI_MODERATE in thresholds.js. They were 75 and 45,
+    # against an index that could only reach 42.5-75.8 across the whole geometry
+    # space — so every case came out Moderate. See thresholds.js for the
+    # derivation of the replacements.
+    return "High" if score >= 55 else ("Moderate" if score >= 32 else "Low")
 
 
 def _grep(path: Path, pattern: str, default: str = "") -> str:

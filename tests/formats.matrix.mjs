@@ -160,6 +160,72 @@ for (const { f, r } of distinct) {
           `scored ${r.osiScore.toFixed(1)}%`);
 }
 
+// --- 2b. every risk tier must be reachable ---------------------------------
+//
+// This is the check that would have caught both band bugs, and it is the one
+// that was missing each time.
+//
+// A normalisation band whose range does not overlap the data that flows through
+// it turns a weighted term into a constant, silently and permanently. It has
+// happened twice here in opposite directions: the OSI band's FLOOR sat above
+// every solved value so the term pinned at 0, and the TAWSS band's CEILING sat
+// above every solved value so the term pinned near 100. The visible symptom of
+// the second was that all six cases on the site read "Moderate" no matter what
+// their geometry was — the index could only reach 42.5 to 75.8 across the
+// ENTIRE geometry space, and 45 to 75 was the Moderate band.
+//
+// So: sweep the whole geometry space, and assert the index actually produces
+// all three tiers. Not that the boundaries are particular numbers — that every
+// verdict the interface can display is one some input can cause.
+console.log("\nevery risk tier is reachable");
+{
+    const S = window.NeuroSurrogate;
+    let lo = Infinity, hi = -Infinity;
+    const tiers = new Set();
+
+    for (let dome = 2; dome <= 30; dome += 0.5) {
+        for (let ar = 0.5; ar <= 3.5; ar += 0.1) {
+            const h = S.predict({ maxDiameterMm: dome, neckDiameterMm: dome / ar,
+                                  aspectRatio: ar });
+            const c = composite(dome, ar, h.sacTawss, h.osi).composite;
+            lo = Math.min(lo, c); hi = Math.max(hi, c);
+            tiers.add(c >= T.CRI_HIGH ? "High" : c >= T.CRI_MODERATE ? "Moderate" : "Low");
+        }
+    }
+
+    check("the index reaches Low somewhere", tiers.has("Low"),
+          `reachable range ${lo}-${hi}, boundary ${T.CRI_MODERATE}`);
+    check("the index reaches Moderate somewhere", tiers.has("Moderate"),
+          `reachable range ${lo}-${hi}`);
+    check("the index reaches High somewhere", tiers.has("High"),
+          `reachable range ${lo}-${hi}, boundary ${T.CRI_HIGH} — `
+          + `no geometry can produce a High verdict`);
+
+    // And the boundaries must sit INSIDE the reachable range, not merely be
+    // crossable at one extreme corner of it.
+    check("the Moderate boundary is inside the reachable range",
+          T.CRI_MODERATE > lo && T.CRI_MODERATE < hi, `${lo} < ${T.CRI_MODERATE} < ${hi}`);
+    check("the High boundary is inside the reachable range",
+          T.CRI_HIGH > lo && T.CRI_HIGH < hi, `${lo} < ${T.CRI_HIGH} < ${hi}`);
+
+    // Each individual term must vary too. A term pinned at either end is a
+    // constant wearing a weight, which is exactly how both bugs presented.
+    for (const [label, lo_, hi_, get] of [
+        ["TAWSS", T.TAWSS_RISK_LOW_PA, T.TAWSS_RISK_HIGH_PA, (h) => h.sacTawss],
+        ["OSI", T.OSI_RISK_LOW, T.OSI_RISK_HIGH, (h) => h.osi],
+    ]) {
+        const scores = [];
+        for (let dome = 3; dome <= 12; dome += 0.5) {
+            const h = S.predict({ maxDiameterMm: dome, neckDiameterMm: dome * 0.8 });
+            scores.push(T.band(get(h), lo_, hi_));
+        }
+        const spread = Math.max(...scores) - Math.min(...scores);
+        check(`the ${label} term is not pinned to an endpoint`, spread > 0.15,
+              `spans only ${(spread * 100).toFixed(1)}% of its band across `
+              + `3-12 mm domes — it is a constant, not a variable`);
+    }
+}
+
 // --- 3. the same aneurysm reads the same in every container ----------------
 //
 // PT-2026-0401_SURFACE.stl and PT-2026-0404/0405 encode identical vertices, and
@@ -250,6 +316,46 @@ console.log("\nabsent data is reported absent, not defaulted");
     check("the report does not name an artery the file never recorded",
           app.includes("Not recorded in the supplied file"),
           "reportAnatomicalTargetEl would print a default site as a finding");
+}
+
+// --- 6. the reference page ------------------------------------------------
+//
+// A static page has ways of being broken that a browser never reports: anchors
+// pointing at nothing, a formula that swallowed itself because its MathML was
+// malformed, a stylesheet that was never linked. None of them throw, and the
+// page looks fine at a glance in every case.
+console.log("\nhemodynamic reference page");
+{
+    const html = readFileSync(resolve(ROOT, "hemodynamics.html"), "utf8");
+    const page = new JSDOM(html).window.document;
+
+    for (const id of ["physics", "wss", "derived", "tawss", "osi", "rrt",
+                      "ecap", "summary", "inpractice"]) {
+        check(`section #${id} exists`, page.getElementById(id) !== null);
+    }
+
+    const broken = [...page.querySelectorAll(".reference-toc a")]
+        .map((a) => a.getAttribute("href").slice(1))
+        .filter((id) => !page.getElementById(id));
+    check("every contents link resolves", broken.length === 0, broken.join(", "));
+
+    // The formulas are the point of the page. MathML renders natively so there
+    // is no library to fail — but a malformed expression drops its own tail
+    // silently, and the surrounding prose still reads correctly.
+    const maths = [...page.querySelectorAll("math")];
+    check("formulas are present as MathML", maths.length >= 12,
+          `${maths.length} <math> elements`);
+    check("no formula is empty",
+          maths.every((m) => (m.textContent || "").trim().length > 0));
+
+    check("the page links back to the dashboard", html.includes('href="index.html"'));
+    check("the page loads the shared design tokens",
+          html.includes('href="style.css"') && html.includes('href="reference.css"'));
+
+    const dash = readFileSync(resolve(ROOT, "index.html"), "utf8");
+    check("the dashboard links to the reference page",
+          dash.includes('href="hemodynamics.html"'),
+          "the page would be unreachable from the app");
 }
 
 console.log(failures ? `\n${failures} failure(s)` : "\nall checks passed");
