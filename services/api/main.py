@@ -419,11 +419,30 @@ def dashboard_feed(s: Session = Depends(db)) -> dict:
         .join(Run, CFDResult.run_id == Run.run_id)
         .join(Study, Run.study_id == Study.study_id)
         .join(Patient, Study.patient_id == Patient.patient_id)
-        .order_by(CFDResult.created_at.desc())
+        # Newest first, with run_version breaking ties: two runs finalised in
+        # the same second are otherwise ordered arbitrarily, and the dedupe
+        # below would then keep an unpredictable one.
+        .order_by(CFDResult.created_at.desc(), Run.run_version.desc())
     ).all()
+
+    # One entry per patient — the LATEST run.
+    #
+    # Runs are immutable and versioned by design: re-solving a case adds a run
+    # rather than overwriting one, which is what makes "we changed the rheology
+    # and TAWSS moved by X" a checkable claim. But this feed joins every result
+    # row, so each historical run surfaced as another copy of the same patient.
+    # The deployed endpoint was returning seven entries for three patients, and
+    # the dashboard would have listed each case once per time it had ever been
+    # solved. The history is worth keeping; it just is not what this endpoint is
+    # for. /runs/{id} remains the way to reach older versions.
+    seen: set[str] = set()
+
     for cfd, run, study, patient in rows:
         if not cfd.zones:
             continue
+        if patient.patient_id in seen:
+            continue
+        seen.add(patient.patient_id)
         patients.append({
             "id": patient.patient_id,
             "morphology": cfd.morphology or {},

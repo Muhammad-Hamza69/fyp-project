@@ -195,3 +195,34 @@ class TestResults:
         body = client.get("/api/v1/dashboard/patients").json()
         assert "patients" in body and "generatedAt" in body
         assert isinstance(body["patients"], list)
+
+
+class TestDashboardFeed:
+    """
+    The feed backs the deployed dashboard, so a duplicate here becomes a
+    duplicated patient card on screen.
+    """
+
+    def test_one_entry_per_patient_even_with_several_runs(self, client):
+        """
+        Regression test. Runs are immutable and versioned, so re-solving a case
+        adds a run rather than replacing one — by design. The feed joined every
+        result row, so a patient appeared once per run it had ever had. In
+        production that meant seven entries for three patients.
+        """
+        client.post("/api/v1/patients", json={"patient_id": "PT-FEED-1", "site": "MCA"})
+        sid = client.post("/api/v1/patients/PT-FEED-1/studies", json={}).json()["study_id"]
+
+        # Three runs of the same study — the versioning behaviour that caused it.
+        for _ in range(3):
+            client.post(f"/api/v1/studies/{sid}/runs", json={})
+
+        feed = client.get("/api/v1/dashboard/patients").json()["patients"]
+        ids = [p["id"] for p in feed]
+        assert len(ids) == len(set(ids)), f"duplicate patients in feed: {ids}"
+
+    def test_feed_serves_the_latest_run(self, client):
+        """Showing an older run than the one just finished would be silent staleness."""
+        feed = client.get("/api/v1/dashboard/patients").json()["patients"]
+        for p in feed:
+            assert "runVersion" in p["provenance"], "feed must say which run it is showing"
